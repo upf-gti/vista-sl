@@ -27,7 +27,9 @@ class App {
         // Mapping data
         this.animationMap = null;
         this.characters = avatars;
-        
+        this.speed = 1;
+        this.loop = false;
+
         // DOM elements
         this.characterCanvas = null;
         this.videoCanvas = null;
@@ -83,12 +85,13 @@ class App {
         const [leftArea, rightArea] = containerArea.split({sizes: ["50%", "auto"]});
         
         // ------------------------------------------------- Menu -------------------------------------------------
-        const buttonsPanel = menubar.addPanel( {className: "m-6", width: "20%"});            
+        const buttonsPanel = menubar.addPanel( {className: "m-6", width: "50%"});            
         buttonsPanel.addTitle("Select a video", {style: { background: "none"}});
 
+        buttonsPanel.sameLine();
         const values = Object.keys(this.animationsMap);
         buttonsPanel.addSelect("SL Video", values, null, async (signName, event) => {
-
+            
             const response = await fetch( this.animationsMap[signName] );
             if( response.ok ) {
                 const data = await response.text();
@@ -106,31 +109,45 @@ class App {
                     this.loadVideo( signName, animationName );                   
                 })
             }
-        }, { filter: true, overflowContainerY: containerArea.root});           
+        }, { filter: true, overflowContainerY: containerArea.root, width: "40%"});           
+        
+        
+        buttonsPanel.addNumber("Speed", this.speed, (v) => {
+            this.speed = v;
+            this.video.playbackRate = v;
+            this.performs.currentCharacter.mixer.timeScale = v;
+        }, {min: 0, max: 2, step: 0.01, width: "40%" });
+        
+        buttonsPanel.addToggle("Loop", this.loop, (v) => {
+            this.loop = v;           
+        });
+        buttonsPanel.endLine();
         
         const charactersInfo = [];
-
+        
         for(let character in this.characters) {
             charactersInfo.push( { value: character, src: this.characters[character][3]} );
         }
-
+        
         buttonsPanel.addSelect("Characters", charactersInfo, charactersInfo[0].value, async (value, event) => {
             $('#loading').fadeIn();
             this.performs.loadAvatar(this.characters[value][0], this.characters[value][1] , new THREE.Quaternion(), value, () => {
                 this.performs.changeAvatar( value );
                 const mixer = this.performs.currentCharacter.mixer;
                 mixer.setTime(this.video.currentTime)
-
+                
                 $('#loading').fadeOut(); //hide();               
             }, (err) => {
                 $('#loading').fadeOut();
                 alert("There was an error loading the character", "Character not loaded");
             } );
-        }, { filter: true, overflowContainerY: containerArea.root })
+        }, { filter: true, overflowContainerY: containerArea.root, width: "80%"})
         
+        buttonsPanel.sameLine();
         buttonsPanel.addToggle("Apply Mediapipe", this.applyMediapipe, (v) => {
             this.applyMediapipe = v;
-        })
+          
+        }, { width: "40%" })
 
         const toggle = buttonsPanel.addToggle("Show 3D Landmarks", this.show3DLandmarks, (v) => {
             if( !this.applyMediapipe && v) {
@@ -139,7 +156,8 @@ class App {
                 return;
             }
             this.show3DLandmarks = v;
-        })
+        }, { width: "40%" })
+        buttonsPanel.endLine();
 
         // ------------------------------------------------- Reference sign area -------------------------------------------------
         this.video = document.createElement('video');
@@ -203,20 +221,24 @@ class App {
             const response = await fetch( landmarksDataUrl );
             if( response.ok ) {
                 const landmarksData = await response.json();
+                this.originalLandmarks = landmarksData;
                 const landmarks = landmarksData[0].landmarks;
                 if(landmarks) {
-                    landmarks.map(landmark => {
-                        return {
-                            x: 1 - landmark.x,
-                            y: landmark.y,
-                            visibility: landmark.visibility
-                        };
-                    });
+                    // landmarks.map(landmark => {
+                    //     return {
+                    //         x: 1 - landmark.x,
+                    //         y: landmark.y,
+                    //         visibility: landmark.visibility
+                    //     };
+                    // });
                     this.drawingVideoUtils.drawConnectors( landmarks, HandLandmarker.HAND_CONNECTIONS, {color: '#1a2025', lineWidth: 4}); //'#00FF00'
                     this.drawingVideoUtils.drawLandmarks( landmarks, {color: '#1a2025',fillColor: 'rgba(255, 255, 255, 1)', lineWidth: 2}); //'#00FF00'
                 
                     requestAnimationFrame(this.animate.bind(this));                             
                 }
+            }
+            else {
+                this.originalLandmarks = null;
             }
         }
         
@@ -240,9 +262,13 @@ class App {
         }
 
         this.video.onended = (e) => {
-            this.performs.keyframeApp.changePlayState(false);
             const mixer = this.performs.currentCharacter.mixer;
             mixer.setTime(0);
+            this.performs.keyframeApp.changePlayState(false);
+            if( this.loop ) {
+                this.video.currentTime = 0;
+                this.video.play();
+            }
         }
     }
 
@@ -305,35 +331,47 @@ class App {
         this.mediapipeScene.leftHandPoints.visible = false;
         this.mediapipeScene.rightHandPoints.visible = false;
         
+        const canvasCtx = this.characterCanvas.getContext('2d'); 
+        canvasCtx.clearRect(0, 0, this.characterCanvas.width, this.characterCanvas.height);
+
         if( this.applyMediapipe ) {
 
             // Convert 3D canvas ( three scene ) into image to send it to Mediapipe
             const bitmap = await createImageBitmap(this.performs.renderer.domElement);
            
-            const canvasCtx = this.characterCanvas.getContext('2d'); 
-            canvasCtx.clearRect(0, 0, this.characterCanvas.width, this.characterCanvas.height);
             
             const detectionsHand = this.handLandmarker.detect(bitmap);
             bitmap.close();
-      
             if (detectionsHand.landmarks.length) {
-                
+                const originalLandmarks = this.originalLandmarks ? this.originalLandmarks[0].landmarks : null;
+                const originalData = this.originalLandmarks ? this.originalLandmarks[0].handedness : "";
+                let index = originalData.indexOf("index=") + 6;
+                index = Number(originalData[index]);
                 // Draw 2D landmarks
-                for (const detectedLandmarks of detectionsHand.landmarks) {
-                    // let score = score_and_drawTeacherLandmarks();
-                    let color = 'red'//scoreToColor(score);
+                for (let j = 0; j < detectionsHand.landmarks.length; j++) {
+                    const detectedLandmarks = detectionsHand.landmarks[j];
+                // for (const detectedLandmarks of detectionsHand.landmarks) {
                     let smoothingFactor = 1;
                     if (this.prevLandmarks) {
-                    for (let i = 0; i < detectedLandmarks.length; i++) {
-                        detectedLandmarks[i].x = smoothingFactor * detectedLandmarks[i].x + (1 - smoothingFactor) * this.prevLandmarks[i].x;
-                        detectedLandmarks[i].y = smoothingFactor * detectedLandmarks[i].y + (1 - smoothingFactor) * this.prevLandmarks[i].y;
+                        for (let i = 0; i < detectedLandmarks.length; i++) {
+                            detectedLandmarks[i].x = smoothingFactor * detectedLandmarks[i].x + (1 - smoothingFactor) * this.prevLandmarks[i].x;
+                            detectedLandmarks[i].y = smoothingFactor * detectedLandmarks[i].y + (1 - smoothingFactor) * this.prevLandmarks[i].y;
+                        }
                     }
+                    
+                    let color = "gray"
+                    if(index == j) {
+                        const transformed = transformLandmarks(originalLandmarks, detectedLandmarks);
+                        const score = scoreLandmarks(transformed, detectedLandmarks);
+                        color = scoreToColor(score);
+                        this.drawingCharacterUtils.drawConnectors(transformed, this.handLandmarker.HAND_CONNECTIONS, { color: "#f0f0f0", lineWidth: 2 });
+                        this.drawingCharacterUtils.drawLandmarks(transformed, { color: 'purple', lineWidth: 2 });
                     }
                     this.prevLandmarks = detectedLandmarks;
                     this.drawingCharacterUtils.drawConnectors(detectedLandmarks, this.handLandmarker.HAND_CONNECTIONS, { color: "#f0f0f0", lineWidth: 2 });
-                    this.drawingCharacterUtils.drawLandmarks(detectedLandmarks, { color: color, lineWidth: 2 });                            
+                    this.drawingCharacterUtils.drawLandmarks(detectedLandmarks, { color: color, lineWidth: 2 });
                 }
-    
+
                 if( this.show3DLandmarks ) {
                     // Draw 3D landmarks (update points positions)
                     for (let j = 0; j < detectionsHand.worldLandmarks.length; j++ ) {
@@ -482,6 +520,83 @@ const transformLandmarks = (originalLandmarks, newLandmarks) => {
 
     return transformedLandmarks;
 }
+
+function flipLandmarks(landmarks) {
+    // Flip the x-coordinates of the landmarks
+    return landmarks.map(landmark => {
+	return {
+	    x: 1 - landmark.x,
+	    y: landmark.y,
+	    visibility: landmark.visibility
+	};
+    });
+}
+
+function scoreLandmarks(landmarks1, landmarks2) {
+    const numLandmarks = landmarks1.length;
+
+    let score = 0;
+
+    for (let i = 0; i < numLandmarks; i++) {
+	// distance between corresponding landmarks
+	const dx = landmarks1[i].x - landmarks2[i].x;
+	const dy = landmarks1[i].y - landmarks2[i].y;
+	const distance = Math.sqrt(dx * dx + dy * dy);
+
+	// Calculate the weight for this landmark, decreasing outwords from the wrist (0):
+	// 0 - 1 - 2 - 3 - 4 
+	// 0 - 5 - 6 - 7 - 8
+	// 0 - 9 - 10 - 11 - 12
+	// 0 - 13 - 14 - 15 - 16
+	// 0 - 17 - 18 - 19 - 20
+	let relativeIndex = (i === 0) ? 0 : 4 - ((i - 1) % 4);
+	// Penalize thumb landmarks more
+	if (i === 3 || i === 4) {
+	    relativeIndex -= 0.5;
+	}
+	const weight = 1 / (1 + relativeIndex);
+
+	// Add the weighted distance to the score
+	score += weight * distance;
+
+	// Penalize thumb general direction match
+	if (i >= 1 && i <= 4) {
+	    const thumbDirection1 = {
+		x: landmarks1[i].x - landmarks1[i - 1].x,
+		y: landmarks1[i].y - landmarks1[i - 1].y
+	    };
+	    const thumbDirection2 = {
+		x: landmarks2[i].x - landmarks2[i - 1].x,
+		y: landmarks2[i].y - landmarks2[i - 1].y
+	    };
+
+	    // Dot product to measure similarity in direction
+	    const dotProduct = thumbDirection1.x * thumbDirection2.x + thumbDirection1.y * thumbDirection2.y;
+	    const magnitude1 = Math.sqrt(thumbDirection1.x * thumbDirection1.x + thumbDirection1.y * thumbDirection1.y);
+	    const magnitude2 = Math.sqrt(thumbDirection2.x * thumbDirection2.x + thumbDirection2.y * thumbDirection2.y);
+	    const directionSimilarity = dotProduct / (magnitude1 * magnitude2);
+
+	    // Penalize based on the difference in direction
+	    const directionPenalty = Math.pow(1 - directionSimilarity, 2);
+	    // console.log("Score: " + score);
+	    // console.log("Direction penalty: " + directionPenalty);
+	    score += directionPenalty * weight;
+	}
+	
+    }
+
+    return score;
+}
+
+function scoreToColor(score) {
+    let maxScore = 0.35;
+    score = Math.max(0, Math.min(maxScore, score));
+    let value = score / maxScore;
+    let green = Math.floor((1 - value) * 255);
+    let red = Math.floor(value * 255);
+    return `rgb(${red}, ${green}, 0)`;
+}
+
 
 const app = new App();
     
