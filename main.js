@@ -218,28 +218,33 @@ class App {
             this.performs.keyframeApp.changePlayState(false);
                      
             // Load reference landmarks of the video
-            const response = await fetch( landmarksDataUrl );
-            if( response.ok ) {
-                const landmarksData = await response.json();
-                this.originalLandmarks = landmarksData;
-                const landmarks = landmarksData[0].landmarks;
-                if(landmarks) {
-                    // landmarks.map(landmark => {
-                    //     return {
-                    //         x: 1 - landmark.x,
-                    //         y: landmark.y,
-                    //         visibility: landmark.visibility
-                    //     };
-                    // });
-                    this.drawingVideoUtils.drawConnectors( landmarks, HandLandmarker.HAND_CONNECTIONS, {color: '#1a2025', lineWidth: 4}); //'#00FF00'
-                    this.drawingVideoUtils.drawLandmarks( landmarks, {color: '#1a2025',fillColor: 'rgba(255, 255, 255, 1)', lineWidth: 2}); //'#00FF00'
-                
-                    requestAnimationFrame(this.animate.bind(this));                             
+            try {
+                const response = await fetch( landmarksDataUrl );
+                if( response.ok ) {
+                    const landmarksData = await response.json();
+                    this.originalLandmarks = landmarksData;
+                    const landmarks = landmarksData[0].landmarks;
+                    if(landmarks) {
+                        // landmarks.map(landmark => {
+                        //     return {
+                        //         x: 1 - landmark.x,
+                        //         y: landmark.y,
+                        //         visibility: landmark.visibility
+                        //     };
+                        // });
+                        this.drawingVideoUtils.drawConnectors( landmarks, HandLandmarker.HAND_CONNECTIONS, {color: '#1a2025', lineWidth: 4}); //'#00FF00'
+                        this.drawingVideoUtils.drawLandmarks( landmarks, {color: '#1a2025',fillColor: 'rgba(255, 255, 255, 1)', lineWidth: 2}); //'#00FF00'
+                    
+                    }
+                }
+                else {
+                    this.originalLandmarks = null;
                 }
             }
-            else {
+            catch( err ) {
                 this.originalLandmarks = null;
             }
+            requestAnimationFrame(this.animate.bind(this));                             
         }
         
         this.video.onplay = (e) => {
@@ -338,8 +343,7 @@ class App {
 
             // Convert 3D canvas ( three scene ) into image to send it to Mediapipe
             const bitmap = await createImageBitmap(this.performs.renderer.domElement);
-           
-            
+                       
             const detectionsHand = this.handLandmarker.detect(bitmap);
             bitmap.close();
             if (detectionsHand.landmarks.length) {
@@ -364,11 +368,11 @@ class App {
                         const transformed = transformLandmarks(originalLandmarks, detectedLandmarks);
                         const score = scoreLandmarks(transformed, detectedLandmarks);
                         color = scoreToColor(score);
-                        this.drawingCharacterUtils.drawConnectors(transformed, this.handLandmarker.HAND_CONNECTIONS, { color: "#f0f0f0", lineWidth: 2 });
+                        this.drawingCharacterUtils.drawConnectors(transformed, HandLandmarker.HAND_CONNECTIONS, { color: "#f0f0f0", lineWidth: 2 });
                         this.drawingCharacterUtils.drawLandmarks(transformed, { color: 'purple', lineWidth: 2 });
                     }
                     this.prevLandmarks = detectedLandmarks;
-                    this.drawingCharacterUtils.drawConnectors(detectedLandmarks, this.handLandmarker.HAND_CONNECTIONS, { color: "#f0f0f0", lineWidth: 2 });
+                    this.drawingCharacterUtils.drawConnectors(detectedLandmarks, HandLandmarker.HAND_CONNECTIONS, { color: "#f0f0f0", lineWidth: 2 });
                     this.drawingCharacterUtils.drawLandmarks(detectedLandmarks, { color: color, lineWidth: 2 });
                 }
 
