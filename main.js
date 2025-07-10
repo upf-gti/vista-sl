@@ -36,6 +36,9 @@ class App {
         this.sceneCanvas = null;
         this.video = null;
         
+        this.referenceColor = '#800080';
+        this.detectedColor =  '#383838';
+
         // GUI actions
         this.applyMediapipe = false;
         this.show3DLandmarks = false;
@@ -106,12 +109,12 @@ class App {
 
     async createGUI() {
         const mainArea = await LX.init({});
-        const [menubar, containerArea] = mainArea.split({type: "vertical", sizes: ["200px", "auto"]});
+        const [menubar, containerArea] = mainArea.split({type: "vertical", sizes: ["240px", "auto"]});
         const [leftArea, rightArea] = containerArea.split({sizes: ["50%", "auto"]});
         
         // ------------------------------------------------- Menu -------------------------------------------------
         const buttonsPanel = menubar.addPanel( {className: "m-6", width: "50%"});
-        buttonsPanel.addTitle("Select a video", {style: { background: "none"}});
+        buttonsPanel.addTitle("Visualize generated animation from video", {style: { background: "none"}});
 
         buttonsPanel.sameLine();
         const values = Object.keys(this.animationsMap);
@@ -165,7 +168,8 @@ class App {
             this.performs.loadAvatar(this.characters[value][0], this.characters[value][1] , new THREE.Quaternion(), value, () => {
                 this.performs.changeAvatar( value );
                 const mixer = this.performs.currentCharacter.mixer;
-                mixer.setTime(this.video.currentTime)
+                mixer.setTime(this.video.currentTime);
+                this.performs.currentCharacter.mixer.timeScale = this.speed;
                 
                 $('#loading').fadeOut(); //hide();               
             }, (err) => {
@@ -188,6 +192,16 @@ class App {
             }
             this.show3DLandmarks = v;
         }, { width: "40%" })
+        buttonsPanel.endLine();
+
+        buttonsPanel.sameLine();
+        buttonsPanel.addColor("Reference 2D landmarks", this.referenceColor, (v) => {
+            this.referenceColor = v;
+        },  { width: "40%" });
+
+        buttonsPanel.addColor("Detected 2D landmarks", this.detectedColor, (v) => {
+            this.detectedColor = v;
+        },  { width: "40%" });
         buttonsPanel.endLine();
 
         // ------------------------------------------------- Reference sign area -------------------------------------------------
@@ -271,7 +285,7 @@ class App {
                         //     };
                         // });
                         this.drawingVideoUtils.drawConnectors( landmarks, HandLandmarker.HAND_CONNECTIONS, {color: '#1a2025', lineWidth: 4}); //'#00FF00'
-                        this.drawingVideoUtils.drawLandmarks( landmarks, {color: '#1a2025',fillColor: 'rgba(255, 255, 255, 1)', lineWidth: 2}); //'#00FF00'
+                        this.drawingVideoUtils.drawLandmarks( landmarks, {color: this.referenceColor , fillColor: this.referenceColor, lineWidth: 2}); //'#00FF00'
 
                         for(let i = 0; i < landmarks.length; i++) {
                             let landmark3D = new THREE.Vector3(landmarks[i].x, landmarks[i].y, landmarks[i].z);
@@ -281,7 +295,8 @@ class App {
                     
                     }
                 }
-                else {                    
+                else {
+                    LX.popup("No mediapipe landmarks available for this video");
                     this.originalLandmarks = null;
                 }
             }
@@ -301,12 +316,16 @@ class App {
                             //     };
                             // });
                             this.drawingVideoUtils.drawConnectors( landmarks, HandLandmarker.HAND_CONNECTIONS, {color: '#1a2025', lineWidth: 4}); //'#00FF00'
-                            this.drawingVideoUtils.drawLandmarks( landmarks, {color: '#1a2025',fillColor: 'rgba(255, 255, 255, 1)', lineWidth: 2}); //'#00FF00'
+                            this.drawingVideoUtils.drawLandmarks( landmarks, {color: this.referenceColor, fillColor: this.referenceColor, lineWidth: 2}); //'#00FF00'
                         
                         }
                     }
+                    else {
+                        LX.popup("No mediapipe landmarks available for this video");
+                    }
                 }
                 catch( err ) {
+                    LX.popup("No mediapipe landmarks available for this video");
                     this.originalLandmarks = null;
                 }
             }
@@ -442,14 +461,14 @@ class App {
                         }
                     }
                     
-                    let color = "gray"
+                    let color = this.detectedColor;
                     if(index == detectionsHand.handedness[j][0].index) {
                         
                         let transformed = transformLandmarks(flipLandmarks(originalLandmarks), detectedLandmarks);
                         const score = scoreLandmarks(transformed, detectedLandmarks);
                         color = scoreToColor(score);
-                        this.drawingCharacterUtils.drawConnectors(transformed, HandLandmarker.HAND_CONNECTIONS, { color: "#f0f0f0", lineWidth: 2 });
-                        this.drawingCharacterUtils.drawLandmarks(transformed, { color: 'purple', lineWidth: 2 });
+                        this.drawingCharacterUtils.drawConnectors(transformed, HandLandmarker.HAND_CONNECTIONS, { color:  '#1a2025', lineWidth: 2 });
+                        this.drawingCharacterUtils.drawLandmarks(transformed, { color: this.referenceColor, lineWidth: 2 });
                     }
                     this.prevLandmarks = detectedLandmarks;
                     this.drawingCharacterUtils.drawConnectors(detectedLandmarks, HandLandmarker.HAND_CONNECTIONS, { color: "#f0f0f0", lineWidth: 2 });
