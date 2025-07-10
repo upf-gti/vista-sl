@@ -36,14 +36,19 @@ class App {
         this.sceneCanvas = null;
         this.video = null;
         
-        this.delayedResizeTime = 500; //ms
-        this.delayedResizeID = null;
-
-        // Mediapipe
+        // GUI actions
         this.applyMediapipe = false;
         this.show3DLandmarks = false;
         this.buildAnimation = true;
-
+        
+        this.delayedResizeTime = 500; //ms
+        this.delayedResizeID = null;
+        
+        // Data provided
+        this.originalLandmarks = null;
+        this.originalLandmarks3D = [];
+        
+        // Mediapipe
         this.handLandmarker = null;
         this.drawingVideoUtils = null;
         this.drawingCharacterUtils = null;
@@ -60,6 +65,25 @@ class App {
         this.performs = new Performs();
         this.performs.init({srcReferencePose: 2, trgReferencePose: 2, restrictView: false, onReady: () => { this.init() }});
         this.performs.changeMode(Performs.Modes.KEYFRAME);
+        this.performs.controls[this.performs.camera].target.set(-0.0018097140234495583, 1.2244433704429296, 0.003067399741162387);
+        
+        this.camera = this.performs.cameras[this.performs.camera].clone();
+
+        // this.performs.controls[this.performs.camera].addEventListener('change', (v) => {
+        //     const hAngle = this.performs.controls[this.performs.camera].getAzimuthalAngle();
+        //     const VAngle = this.performs.controls[this.performs.camera].getPolarAngle();
+            
+        //     for(let i = 0; i < this.originalLandmarks3D.length; i++ ) {
+        //         let landmark2D = this.originalLandmarks3D[i].clone();
+        //         landmark2D.z = 1 - landmark2D.z;
+        //         landmark2D.applyAxisAngle(new THREE.Vector3(0,1,0), hAngle);
+        //         landmark2D.applyAxisAngle(new THREE.Vector3(1,0,0), -VAngle);
+        //         landmark2D.project(this.camera);
+        //         this.originalLandmarks[0].landmarks[i].x = landmark2D.x;
+        //         this.originalLandmarks[0].landmarks[i].y = landmark2D.y;
+        //         this.originalLandmarks[0].landmarks[i].z = landmark2D.z;
+        //     }
+        // })
    
     }
 
@@ -230,6 +254,7 @@ class App {
             // Hide info
             document.getElementById("select-video").classList.add("hidden");
             this.originalLandmarks = null;
+            this.originalLandmarks3D = [];
             // Load reference landmarks of the video
             try {
                 const response = await fetch( landmarksDataUrl );
@@ -247,6 +272,12 @@ class App {
                         // });
                         this.drawingVideoUtils.drawConnectors( landmarks, HandLandmarker.HAND_CONNECTIONS, {color: '#1a2025', lineWidth: 4}); //'#00FF00'
                         this.drawingVideoUtils.drawLandmarks( landmarks, {color: '#1a2025',fillColor: 'rgba(255, 255, 255, 1)', lineWidth: 2}); //'#00FF00'
+
+                        for(let i = 0; i < landmarks.length; i++) {
+                            let landmark3D = new THREE.Vector3(landmarks[i].x, landmarks[i].y, landmarks[i].z);
+                            landmark3D.unproject(this.camera)
+                            this.originalLandmarks3D.push(landmark3D);
+                        }
                     
                     }
                 }
@@ -278,8 +309,8 @@ class App {
                 catch( err ) {
                     this.originalLandmarks = null;
                 }
-                requestAnimationFrame(this.animate.bind(this));                             
             }
+            requestAnimationFrame(this.animate.bind(this));                             
         }
         
         this.video.onplay = (e) => {
