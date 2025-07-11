@@ -162,7 +162,7 @@ class App {
         for(let character in this.characters) {
             charactersInfo.push( { value: character, src: this.characters[character][3]} );
         }
-        
+        buttonsPanel.sameLine();
         buttonsPanel.addSelect("Characters", charactersInfo, charactersInfo[0].value, async (value, event) => {
             $('#loading').fadeIn();
             this.performs.loadAvatar(this.characters[value][0], this.characters[value][1] , new THREE.Quaternion(), value, () => {
@@ -177,6 +177,11 @@ class App {
                 alert("There was an error loading the character", "Character not loaded");
             } );
         }, { filter: true, overflowContainerY: containerArea.root, width: "80%"})
+        
+        buttonsPanel.addColor("Background", {r: this.performs.scene.background.r, g: this.performs.scene.background.g, b: this.performs.scene.background.b } , (v) => {
+            this.performs.setBackPlaneColour(v);
+        },  { width: "40%" });
+        buttonsPanel.endLine();
         
         buttonsPanel.sameLine();
         buttonsPanel.addToggle("Apply Mediapipe", this.applyMediapipe, (v) => {
