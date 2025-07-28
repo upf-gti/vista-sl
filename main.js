@@ -3,7 +3,9 @@ import { LX } from 'lexgui'
 import 'lexgui/components/videoeditor.js';
 import * as THREE from 'three'
 import { DrawingUtils, HandLandmarker, PoseLandmarker, FilesetResolver} from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.13';
-
+import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
+import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
+import { Line2 } from 'three/addons/lines/Line2.js';
 let runningMode = "IMAGE";
 // let handLandmarker = null;
 
@@ -87,7 +89,7 @@ class App {
         //         this.originalLandmarks[0].landmarks[i].z = landmark2D.z;
         //     }
         // })
-   
+        this.trajectoryPos = new THREE.Group();
     }
 
     async init() {
@@ -95,7 +97,8 @@ class App {
         if( response.ok ) {
             this.animationsMap = await response.json();
         }
-
+        this.performs.scene.add(this.trajectoryPos);
+        
         await this.createGUI();
         this.createMediapipeScene();
         
@@ -132,7 +135,58 @@ class App {
                         
                         this.performs.keyframeApp.onChangeAnimation(animationName, true);
                         this.performs.keyframeApp.changePlayState(false);
+                        const animation = this.performs.keyframeApp.bindedAnimations[animationName][this.performs.currentCharacter.model.name];
+                        let boneName = null;
+                        for(let i = 0; i < animation.mixerBodyAnimation.tracks.length; i++) {
+                            const track = animation.mixerBodyAnimation.tracks[i]
+                            const trackName = track.name;
+                            if(trackName.includes("LeftHand")) {
+                                boneName = trackName.replace(".quaternion", "");
+                                if(boneName) {
+                                    break;
+                                    // let position = new THREE.Vector3();
+                                    // bone.getWorldPosition(position);
+                                    // positions.push(position);
+                                    // for(let t = 0; t < track.times.length*4; t=+4) {
+                                        //     let q = new THREE.Quaternion(track.values[t], track.values[t+1], track.values[t+2], track.values[t+3]);
+                                        
+                                        //     positions.push(position);
+                                    // }
+                                }
+                            }
+                        }
+                        if(!boneName)
+                            return;
+                        let positions = [];
+                        this.trajectoryPos.clear();
+                        const track = animation.mixerBodyAnimation.tracks[0];
+                        const mixer = this.performs.currentCharacter.mixer;
+                        for(let t = 1; t < track.times.length-2; t++) {
+                        
+                            mixer.setTime(track.times[t]);
+                            let position = new THREE.Vector3();
+                            let bone = this.performs.currentCharacter.model.getObjectByName(boneName);
+                            bone.getWorldPosition(position);
+                            mixer.setTime(track.times[t+1]);
+                            let pos2 = new THREE.Vector3();
+                            bone = this.performs.currentCharacter.model.getObjectByName(boneName);
+                            bone.getWorldPosition(pos2);
+                            const arrow = customArrow(position.x, position.y, position.z, pos2.x, pos2.y, pos2.z, 0.0005, new THREE.Color(`hsl(${180*Math.sin( track.times[t]/Math.PI)}, 100%, 50%)`))
+                            this.trajectoryPos.add(arrow);
+
+                            positions = positions.concat(position.toArray());
+                        }
+                        mixer.setTime(0.0);                      
+
+                        // const geometry = new THREE.BufferGeometry();
+				        // geometry.setAttribute( 'position', new THREE.BufferAttribute( new Float32Array( positions ), 3 ) );
+                        // // const curve = new THREE.CatmullRomCurve3( positions );
+                        // const curve = new THREE.Line( geometry.clone(), new THREE.LineBasicMaterial( {
+                        //     color: 0x00ff00,
+                        //     opacity: 0.35
+                        // } ) );
     
+                        // this.performs.scene.add(curve);
                     })
                     this.buildAnimation = false;
                 }
@@ -1168,7 +1222,35 @@ function createBodyAnimationFromWorldLandmarks( worldLandmarksArray, skeleton ){
 
     // return new THREE.AnimationClip( "animation", -1, tracks );
 }
+const ARROW_BODY = new THREE.CylinderGeometry( 1, 1, 1, 12 )
+													.rotateX( Math.PI/2)
+													.translate( 0, 0, 0.5 );
 
+            const ARROW_HEAD = new THREE.ConeGeometry( 1, 1, 12 )
+													.rotateX( Math.PI/2)
+													.translate( 0, 0, -0.5 );
+
+
+            function customArrow( fx, fy, fz, ix, iy, iz, thickness, color)
+            {
+                var material = new THREE.MeshLambertMaterial( {color: color} );
+                
+                var length = Math.sqrt( (ix-fx)**2 + (iy-fy)**2 + (iz-fz)**2 );
+                
+                var body = new THREE.Mesh( ARROW_BODY, material );
+                    body.scale.set( thickness, thickness, length-8*thickness );
+                    
+                var head = new THREE.Mesh( ARROW_HEAD, material );
+                    head.position.set( 0, 0, length );
+                    head.scale.set( 4*thickness, 4*thickness, 8*thickness );
+                
+                var arrow = new THREE.Group( );
+                    arrow.position.set( ix, iy, iz );
+                    arrow.lookAt( fx, fy, fz );	
+                    arrow.add( body, head );
+                
+                return arrow;
+            }
 const app = new App();
     
 window.global = {app};
