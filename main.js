@@ -273,7 +273,63 @@ class App {
                 const mixer = this.performs.currentCharacter.mixer;
                 mixer.setTime(this.video.currentTime);
                 this.performs.currentCharacter.mixer.timeScale = this.speed;
+                const animation = this.performs.keyframeApp.bindedAnimations[this.performs.keyframeApp.currentAnimation][this.performs.currentCharacter.model.name];
+                let boneName = null;
                 
+                for(let i = 0; i < animation.mixerBodyAnimation.tracks.length; i++) {
+                    const track = animation.mixerBodyAnimation.tracks[i]
+                    const trackName = track.name;
+                    for(let trajectory in this.trajectories) {
+
+                        if(trackName.includes(trajectory+".")) {
+                            boneName = trackName.replace(".quaternion", "");
+                            if(boneName) {
+                                this.trajectories[trajectory].name = boneName;
+                                // if(trajectory != "LeftHand" && trajectory != "RightHand") {
+                                //     this.trajectories[trajectory].position.copy(this.performs.currentCharacter.model.getObjectByName(this.trajectories[trajectory].name.replace("4", "1")).position);
+                                // }
+                                break;
+                                // let position = new THREE.Vector3();
+                                // bone.getWorldPosition(position);
+                                // positions.push(position);
+                                // for(let t = 0; t < track.times.length*4; t=+4) {
+                                    //     let q = new THREE.Quaternion(track.values[t], track.values[t+1], track.values[t+2], track.values[t+3]);
+                                    
+                                    //     positions.push(position);
+                                // }
+                            }
+                        }
+                    }
+                }
+                
+                const track = animation.mixerBodyAnimation.tracks[0];
+                this.trajectoryEnd = track.times.length;
+                for(let trajectory in this.trajectories) {
+                    this.trajectories[trajectory].clear();
+                    let offset = new THREE.Vector3();
+                    for(let t = 0; t < track.times.length-2; t++) {
+                        if(trajectory != "LeftHand" && trajectory != "RightHand") {
+                            this.performs.currentCharacter.model.getObjectByName(this.trajectories[trajectory].name.replace("4", "1")).getWorldPosition(offset);
+                        }
+                
+                        mixer.setTime(track.times[t]);
+                        let position = new THREE.Vector3();
+                        let bone = this.performs.currentCharacter.model.getObjectByName(this.trajectories[trajectory].name);
+                        bone.getWorldPosition(position);
+                        position.sub(offset);
+                        mixer.setTime(track.times[t+1]);
+                        let pos2 = new THREE.Vector3();
+                        bone = this.performs.currentCharacter.model.getObjectByName(this.trajectories[trajectory].name);
+                        bone.getWorldPosition(pos2);
+                        if(trajectory != "LeftHand" && trajectory != "RightHand") {
+                            this.performs.currentCharacter.model.getObjectByName(this.trajectories[trajectory].name.replace("4", "1")).getWorldPosition(offset);
+                        }
+                        pos2.sub(offset);
+                        const arrow = customArrow(pos2.x, pos2.y, pos2.z, position.x, position.y, position.z, 0.0005, this.trajectories[trajectory].color || new THREE.Color(`hsl(${180*Math.sin( track.times[t]/Math.PI)}, 100%, 50%)`))
+                        this.trajectories[trajectory].add(arrow);
+                    }
+
+                        }
                 $('#loading').fadeOut(); //hide();               
             }, (err) => {
                 $('#loading').fadeOut();
@@ -367,8 +423,9 @@ class App {
                 p.addToggle(`Show ${trajectory}`, this.trajectories[trajectory].visible, (v) => { this.trajectories[trajectory].visible = v; })
             }
             
-            p.addNumber("Start Frames", this.trajectoryStart, (v) => {
-                this.trajectoryStart = v;
+            p.addRange("Frames to show", [this.trajectoryStart, this.trajectoryEnd], (v) => {
+                this.trajectoryStart = v[0];
+                this.trajectoryEnd = v[1];
                 for(let trajectory in this.trajectories) {
                     for(let i = 0; i < this.trajectories[trajectory].children.length; i++) {
                         if(i < this.trajectoryStart  || i > this.trajectoryEnd) {
@@ -379,21 +436,8 @@ class App {
                         }
                     }
                 }
-            }, {min: 0, max: this.trajectories["LeftHand"].children.length, step: 1})
+            }, {min: 0, max: this.trajectories["LeftHand"].children.length, step: 1});
 
-            p.addNumber("End Frames", this.trajectoryEnd, (v) => {
-                this.trajectoryEnd = v;
-                for(let trajectory in this.trajectories) {
-                    for(let i = 0; i < this.trajectories[trajectory].children.length; i++) {
-                        if(i < this.trajectoryStart  || i > this.trajectoryEnd) {
-                            this.trajectories[trajectory].children[i].visible = false;
-                        }
-                        else {
-                            this.trajectories[trajectory].children[i].visible = true;
-                        }
-                    }
-                }
-            }, {min: 0, max: this.trajectories["LeftHand"].children.length, step: 1})
         })
     }
 
@@ -662,18 +706,18 @@ class App {
             this.mediapipeScene.renderer.render(this.mediapipeScene.scene, this.performs.cameras[this.performs.camera]);
         }
         // if(this.performs.keyframeApp.playing) {
-            // let leftHandRot = new THREE.Quaternion();
-            // this.performs.currentCharacter.model.getObjectByName(this.trajectories["LeftHand"].name).getWorldQuaternion(leftHandRot);
-            // let rightHandRot = new THREE.Quaternion();
-            // this.performs.currentCharacter.model.getObjectByName(this.trajectories["RightHand"].name).getWorldQuaternion(rightHandRot);
+            let leftHandRot = new THREE.Quaternion();
+            this.performs.currentCharacter.model.getObjectByName(this.trajectories["LeftHand"].name).getWorldQuaternion(leftHandRot);
+            let rightHandRot = new THREE.Quaternion();
+            this.performs.currentCharacter.model.getObjectByName(this.trajectories["RightHand"].name).getWorldQuaternion(rightHandRot);
 
             for(let trajectory in this.trajectories) {
 
                 if(trajectory != "LeftHand" && trajectory != "RightHand") {
                     const bone = this.performs.currentCharacter.model.getObjectByName(this.trajectories[trajectory].name.replace("4", "1"));
                     bone.getWorldPosition(this.trajectories[trajectory].position);
-                    // this.trajectories[trajectory].quaternion.copy(bone.quaternion);
-                    // bone.getWorldQuaternion(this.trajectories[trajectory].quaternion);
+                    this.trajectories[trajectory].quaternion.copy(bone.quaternion);
+                    bone.getWorldQuaternion(this.trajectories[trajectory].quaternion);
                     // if(trajectory.includes("LeftHand")) {
                     //     this.trajectories[trajectory].quaternion.copy(leftHandRot);
                     // }
