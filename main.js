@@ -146,9 +146,9 @@ class App {
         const mainArea = await LX.init({});
         const [menubar, containerArea] = mainArea.split({type: "vertical", sizes: ["240px", "auto"]});
         const [leftArea, rightArea] = containerArea.split({sizes: ["50%", "auto"]});
-        
+        const [videoMenu, avatarMenu] = menubar.split({sizes: ["50%", "auto"]});
         // ------------------------------------------------- Menu -------------------------------------------------
-        const buttonsPanel = menubar.addPanel( {className: "m-6", width: "50%"});
+        const buttonsPanel = menubar.addPanel( {className: "m-6", width: "100%"});
         buttonsPanel.addTitle("Visualize generated animation from video", {style: { background: "none"}});
 
         buttonsPanel.sameLine();
