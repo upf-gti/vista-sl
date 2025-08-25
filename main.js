@@ -1,6 +1,7 @@
 import { Performs } from './js/Performs.js'
 import { LX } from 'lexgui'
-import 'lexgui/components/videoeditor.js';
+// import 'lexgui/components/videoeditor.js';
+import '/videoeditor.js'
 import * as THREE from 'three'
 import { DrawingUtils, HandLandmarker, PoseLandmarker, FilesetResolver} from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.13';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
@@ -31,6 +32,9 @@ class App {
         this.characters = avatars;
         this.speed = 1;
         this.loop = false;
+        this.selectedVideo = null;
+
+        this.startTimeString = 0;
 
         // DOM elements
         this.characterCanvas = null;
@@ -105,6 +109,13 @@ class App {
         }
         this.trajectoryStart = 0;
         this.trajectoryEnd = 100;
+        window.addEventListener( 'resize', this.onWindowResize.bind(this) );
+    }
+
+    onWindowResize() {
+        const width = this.characterCanvas.parentElement.clientWidth;
+        const height = this.characterCanvas.parentElement.clientHeight;
+        this.resize(width, height);
     }
 
     async init() {
@@ -145,238 +156,246 @@ class App {
     async createGUI() {
         const mainArea = await LX.init({});
         const [menubar, containerArea] = mainArea.split({type: "vertical", sizes: ["240px", "auto"]});
-        const [leftArea, rightArea] = containerArea.split({sizes: ["50%", "auto"]});
-        const [videoMenu, avatarMenu] = menubar.split({sizes: ["50%", "auto"]});
-        // ------------------------------------------------- Menu -------------------------------------------------
-        const buttonsPanel = menubar.addPanel( {className: "m-6", width: "100%"});
-        buttonsPanel.addTitle("Visualize generated animation from video", {style: { background: "none"}});
+        const [topContainer, bottomContainer] = containerArea.split({type: "vertical", sizes: ["80%", "auto"]});
+        const [leftArea, rightArea] = topContainer.split({sizes: ["50%", "auto"]});
+        const [videoMenu, sceneMenu] = menubar.split({sizes: ["50%", "auto"]});
+        const videoPanel = videoMenu.addPanel( {className: "m-6", width: "calc(100% - 3rem)"});
+        const scenePanel = sceneMenu.addPanel( {className: "m-6", width: "calc(100% - 3rem)"});
+        
+        const refresh = () => {
+            // ------------------------------------------------- Video Menu -------------------------------------------------
+            videoPanel.clear();
 
-        buttonsPanel.sameLine();
-        const values = Object.keys(this.animationsMap);
-        buttonsPanel.addSelect("SL Video", values, null, async (signName, event) => {
-            this.loadVideo( signName );           
-            try {
-                const response = await fetch( this.animationsMap[signName] );
-                if( response.ok ) {
-                    const data = await response.text();
-                
-                    this.performs.keyframeApp.loadFiles( [ {name: this.animationsMap[signName], data}] , ( animationName ) => {
-                        // Show canvas after animation loaded
-                        this.characterCanvas.classList.remove("hidden");
-                        this.sceneCanvas.classList.remove("hidden");
-                        
-                        this.performs.keyframeApp.onChangeAnimation(animationName, true);
-                        this.performs.keyframeApp.changePlayState(false);
-                        const animation = this.performs.keyframeApp.bindedAnimations[animationName][this.performs.currentCharacter.model.name];
-                        let boneName = null;
-                        
-                        for(let i = 0; i < animation.mixerBodyAnimation.tracks.length; i++) {
-                            const track = animation.mixerBodyAnimation.tracks[i]
-                            const trackName = track.name;
-                            for(let trajectory in this.trajectories) {
-
-                                if(trackName.includes(trajectory+".")) {
-                                    boneName = trackName.replace(".quaternion", "");
-                                    if(boneName) {
-                                        this.trajectories[trajectory].name = boneName;
-                                        // if(trajectory != "LeftHand" && trajectory != "RightHand") {
-                                        //     this.trajectories[trajectory].position.copy(this.performs.currentCharacter.model.getObjectByName(this.trajectories[trajectory].name.replace("4", "1")).position);
-                                        // }
-                                        break;
-                                        // let position = new THREE.Vector3();
-                                        // bone.getWorldPosition(position);
-                                        // positions.push(position);
-                                        // for(let t = 0; t < track.times.length*4; t=+4) {
-                                            //     let q = new THREE.Quaternion(track.values[t], track.values[t+1], track.values[t+2], track.values[t+3]);
-                                            
-                                            //     positions.push(position);
-                                        // }
+            videoPanel.addTitle("Visualize generated animation from video", {style: { background: "none"}});
+    
+            videoPanel.sameLine();
+            const values = Object.keys(this.animationsMap);
+            videoPanel.addSelect("SL Video", values, this.selectedVideo, async (signName, event) => {
+                this.selectedVideo = signName;
+                this.loadVideo( signName );           
+                try {
+                    const response = await fetch( this.animationsMap[signName] );
+                    if( response.ok ) {
+                        const data = await response.text();
+                    
+                        this.performs.keyframeApp.loadFiles( [ {name: this.animationsMap[signName], data}] , ( animationName ) => {
+                            // Show canvas after animation loaded
+                            this.characterCanvas.classList.remove("hidden");
+                            this.sceneCanvas.classList.remove("hidden");
+                            
+                            this.performs.keyframeApp.onChangeAnimation(animationName, true);
+                            this.performs.keyframeApp.changePlayState(false);
+                            const animation = this.performs.keyframeApp.bindedAnimations[animationName][this.performs.currentCharacter.model.name];
+                            let boneName = null;
+                            
+                            for(let i = 0; i < animation.mixerBodyAnimation.tracks.length; i++) {
+                                const track = animation.mixerBodyAnimation.tracks[i]
+                                const trackName = track.name;
+                                for(let trajectory in this.trajectories) {
+    
+                                    if(trackName.includes(trajectory+".")) {
+                                        boneName = trackName.replace(".quaternion", "");
+                                        if(boneName) {
+                                            this.trajectories[trajectory].name = boneName;
+                                            // if(trajectory != "LeftHand" && trajectory != "RightHand") {
+                                            //     this.trajectories[trajectory].position.copy(this.performs.currentCharacter.model.getObjectByName(this.trajectories[trajectory].name.replace("4", "1")).position);
+                                            // }
+                                            break;
+                                            // let position = new THREE.Vector3();
+                                            // bone.getWorldPosition(position);
+                                            // positions.push(position);
+                                            // for(let t = 0; t < track.times.length*4; t=+4) {
+                                                //     let q = new THREE.Quaternion(track.values[t], track.values[t+1], track.values[t+2], track.values[t+3]);
+                                                
+                                                //     positions.push(position);
+                                            // }
+                                        }
                                     }
                                 }
                             }
-                        }
-                        
-                        const mixer = this.performs.currentCharacter.mixer;
-                        const track = animation.mixerBodyAnimation.tracks[0];
-                        this.trajectoryEnd = track.times.length;
-                        for(let trajectory in this.trajectories) {
-                            this.trajectories[trajectory].clear();
-                            let offset = new THREE.Vector3();
-                            for(let t = 0; t < track.times.length-2; t++) {
-                                if(trajectory != "LeftHand" && trajectory != "RightHand") {
-                                    this.performs.currentCharacter.model.getObjectByName(this.trajectories[trajectory].name.replace("4", "1")).getWorldPosition(offset);
+                            
+                            const mixer = this.performs.currentCharacter.mixer;
+                            const track = animation.mixerBodyAnimation.tracks[0];
+                            this.trajectoryEnd = track.times.length;
+                            for(let trajectory in this.trajectories) {
+                                this.trajectories[trajectory].clear();
+                                let offset = new THREE.Vector3();
+                                for(let t = 0; t < track.times.length-2; t++) {
+                                    if(trajectory != "LeftHand" && trajectory != "RightHand") {
+                                        this.performs.currentCharacter.model.getObjectByName(this.trajectories[trajectory].name.replace("4", "1")).getWorldPosition(offset);
+                                    }
+                            
+                                    mixer.setTime(track.times[t]);
+                                    let position = new THREE.Vector3();
+                                    let bone = this.performs.currentCharacter.model.getObjectByName(this.trajectories[trajectory].name);
+                                    bone.getWorldPosition(position);
+                                    position.sub(offset);
+                                    mixer.setTime(track.times[t+1]);
+                                    let pos2 = new THREE.Vector3();
+                                    bone = this.performs.currentCharacter.model.getObjectByName(this.trajectories[trajectory].name);
+                                    bone.getWorldPosition(pos2);
+                                    if(trajectory != "LeftHand" && trajectory != "RightHand") {
+                                        this.performs.currentCharacter.model.getObjectByName(this.trajectories[trajectory].name.replace("4", "1")).getWorldPosition(offset);
+                                    }
+                                    pos2.sub(offset);
+                                    const arrow = customArrow(pos2.x, pos2.y, pos2.z, position.x, position.y, position.z, 0.0005, this.trajectories[trajectory].color || new THREE.Color(`hsl(${180*Math.sin( track.times[t]/Math.PI)}, 100%, 50%)`))
+                                    this.trajectories[trajectory].add(arrow);
                                 }
-                        
-                                mixer.setTime(track.times[t]);
-                                let position = new THREE.Vector3();
-                                let bone = this.performs.currentCharacter.model.getObjectByName(this.trajectories[trajectory].name);
-                                bone.getWorldPosition(position);
-                                position.sub(offset);
-                                mixer.setTime(track.times[t+1]);
-                                let pos2 = new THREE.Vector3();
-                                bone = this.performs.currentCharacter.model.getObjectByName(this.trajectories[trajectory].name);
-                                bone.getWorldPosition(pos2);
-                                if(trajectory != "LeftHand" && trajectory != "RightHand") {
-                                    this.performs.currentCharacter.model.getObjectByName(this.trajectories[trajectory].name.replace("4", "1")).getWorldPosition(offset);
-                                }
-                                pos2.sub(offset);
-                                const arrow = customArrow(pos2.x, pos2.y, pos2.z, position.x, position.y, position.z, 0.0005, this.trajectories[trajectory].color || new THREE.Color(`hsl(${180*Math.sin( track.times[t]/Math.PI)}, 100%, 50%)`))
-                                this.trajectories[trajectory].add(arrow);
-                            }
-
-                        }
-                        mixer.setTime(0.0);                      
-
-                        // const geometry = new THREE.BufferGeometry();
-				        // geometry.setAttribute( 'position', new THREE.BufferAttribute( new Float32Array( positions ), 3 ) );
-                        // // const curve = new THREE.CatmullRomCurve3( positions );
-                        // const curve = new THREE.Line( geometry.clone(), new THREE.LineBasicMaterial( {
-                        //     color: 0x00ff00,
-                        //     opacity: 0.35
-                        // } ) );
     
-                        // this.performs.scene.add(curve);
-                    })
-                    this.buildAnimation = false;
+                            }
+                            mixer.setTime(0.0);                      
+    
+                            // const geometry = new THREE.BufferGeometry();
+                            // geometry.setAttribute( 'position', new THREE.BufferAttribute( new Float32Array( positions ), 3 ) );
+                            // // const curve = new THREE.CatmullRomCurve3( positions );
+                            // const curve = new THREE.Line( geometry.clone(), new THREE.LineBasicMaterial( {
+                            //     color: 0x00ff00,
+                            //     opacity: 0.35
+                            // } ) );
+        
+                            // this.performs.scene.add(curve);
+                        })
+                        this.buildAnimation = false;
+                    }
+                    else {
+                        this.buildAnimation = true;
+                    }
+                    refresh();
                 }
-                else {
+                catch( err ) {
                     this.buildAnimation = true;
-                }    
+                }
+            }, { filter: true, overflowContainerY: containerArea.root, width: "40%"});           
+            
+            videoPanel.addNumber("Speed", this.speed, (v) => {
+                this.speed = v;
+                this.video.playbackRate = v;
+                this.performs.currentCharacter.mixer.timeScale = v;
+            }, {min: 0, max: 2, step: 0.01, width: "40%" });
+            
+            videoPanel.addToggle("Loop", this.loop, (v) => {
+                this.loop = v;           
+            });
+            videoPanel.endLine();
+    
+            videoPanel.addColor("Reference 2D landmarks", this.referenceColor, (v) => {
+                this.referenceColor = v;
+            },  { nameWidth: "200px", width: "40%" });
+    
+            // ------------------------------------------------- Scene Menu -------------------------------------------------            
+            scenePanel.clear();
+            const charactersInfo = [];
+            
+            for(let character in this.characters) {
+                charactersInfo.push( { value: character, src: this.characters[character][3]} );
             }
-            catch( err ) {
-                this.buildAnimation = true;
-            }
-        }, { filter: true, overflowContainerY: containerArea.root, width: "40%"});           
-        
-        
-        buttonsPanel.addNumber("Speed", this.speed, (v) => {
-            this.speed = v;
-            this.video.playbackRate = v;
-            this.performs.currentCharacter.mixer.timeScale = v;
-        }, {min: 0, max: 2, step: 0.01, width: "40%" });
-        
-        buttonsPanel.addToggle("Loop", this.loop, (v) => {
-            this.loop = v;           
-        });
-        buttonsPanel.endLine();
-        
-        const charactersInfo = [];
-        
-        for(let character in this.characters) {
-            charactersInfo.push( { value: character, src: this.characters[character][3]} );
-        }
-        buttonsPanel.sameLine();
-        buttonsPanel.addSelect("Characters", charactersInfo, charactersInfo[0].value, async (value, event) => {
-            $('#loading').fadeIn();
-            this.performs.loadAvatar(this.characters[value][0], this.characters[value][1] , new THREE.Quaternion(), value, () => {
-                this.performs.changeAvatar( value );
-                const mixer = this.performs.currentCharacter.mixer;
-                mixer.setTime(this.video.currentTime);
-                this.performs.currentCharacter.mixer.timeScale = this.speed;
-                const animation = this.performs.keyframeApp.bindedAnimations[this.performs.keyframeApp.currentAnimation][this.performs.currentCharacter.model.name];
-                let boneName = null;
-                
-                for(let i = 0; i < animation.mixerBodyAnimation.tracks.length; i++) {
-                    const track = animation.mixerBodyAnimation.tracks[i]
-                    const trackName = track.name;
-                    for(let trajectory in this.trajectories) {
-
-                        if(trackName.includes(trajectory+".")) {
-                            boneName = trackName.replace(".quaternion", "");
-                            if(boneName) {
-                                this.trajectories[trajectory].name = boneName;
-                                // if(trajectory != "LeftHand" && trajectory != "RightHand") {
-                                //     this.trajectories[trajectory].position.copy(this.performs.currentCharacter.model.getObjectByName(this.trajectories[trajectory].name.replace("4", "1")).position);
-                                // }
-                                break;
-                                // let position = new THREE.Vector3();
-                                // bone.getWorldPosition(position);
-                                // positions.push(position);
-                                // for(let t = 0; t < track.times.length*4; t=+4) {
-                                    //     let q = new THREE.Quaternion(track.values[t], track.values[t+1], track.values[t+2], track.values[t+3]);
-                                    
-                                    //     positions.push(position);
-                                // }
+            scenePanel.addSelect("Character", charactersInfo, this.performs.currentCharacter ? this.performs.currentCharacter.model.name : charactersInfo[0].value, async (value, event) => {
+                $('#loading').fadeIn();
+                this.performs.loadAvatar(this.characters[value][0], this.characters[value][1] , new THREE.Quaternion(), value, () => {
+                    this.performs.changeAvatar( value );
+                    const mixer = this.performs.currentCharacter.mixer;
+                    mixer.setTime(this.video.currentTime);
+                    this.performs.currentCharacter.mixer.timeScale = this.speed;
+                    const animation = this.performs.keyframeApp.bindedAnimations[this.performs.keyframeApp.currentAnimation][this.performs.currentCharacter.model.name];
+                    let boneName = null;
+                    
+                    for(let i = 0; i < animation.mixerBodyAnimation.tracks.length; i++) {
+                        const track = animation.mixerBodyAnimation.tracks[i]
+                        const trackName = track.name;
+                        for(let trajectory in this.trajectories) {
+    
+                            if(trackName.includes(trajectory+".")) {
+                                boneName = trackName.replace(".quaternion", "");
+                                if(boneName) {
+                                    this.trajectories[trajectory].name = boneName;
+                                    // if(trajectory != "LeftHand" && trajectory != "RightHand") {
+                                    //     this.trajectories[trajectory].position.copy(this.performs.currentCharacter.model.getObjectByName(this.trajectories[trajectory].name.replace("4", "1")).position);
+                                    // }
+                                    break;
+                                    // let position = new THREE.Vector3();
+                                    // bone.getWorldPosition(position);
+                                    // positions.push(position);
+                                    // for(let t = 0; t < track.times.length*4; t=+4) {
+                                        //     let q = new THREE.Quaternion(track.values[t], track.values[t+1], track.values[t+2], track.values[t+3]);
+                                        
+                                        //     positions.push(position);
+                                    // }
+                                }
                             }
                         }
                     }
+                    
+                    const track = animation.mixerBodyAnimation.tracks[0];
+                    this.trajectoryEnd = track.times.length;
+                    for(let trajectory in this.trajectories) {
+                        this.trajectories[trajectory].clear();
+                        let offset = new THREE.Vector3();
+                        for(let t = 0; t < track.times.length-2; t++) {
+                            if(trajectory != "LeftHand" && trajectory != "RightHand") {
+                                this.performs.currentCharacter.model.getObjectByName(this.trajectories[trajectory].name.replace("4", "1")).getWorldPosition(offset);
+                            }
+                    
+                            mixer.setTime(track.times[t]);
+                            let position = new THREE.Vector3();
+                            let bone = this.performs.currentCharacter.model.getObjectByName(this.trajectories[trajectory].name);
+                            bone.getWorldPosition(position);
+                            position.sub(offset);
+                            mixer.setTime(track.times[t+1]);
+                            let pos2 = new THREE.Vector3();
+                            bone = this.performs.currentCharacter.model.getObjectByName(this.trajectories[trajectory].name);
+                            bone.getWorldPosition(pos2);
+                            if(trajectory != "LeftHand" && trajectory != "RightHand") {
+                                this.performs.currentCharacter.model.getObjectByName(this.trajectories[trajectory].name.replace("4", "1")).getWorldPosition(offset);
+                            }
+                            pos2.sub(offset);
+                            const arrow = customArrow(pos2.x, pos2.y, pos2.z, position.x, position.y, position.z, 0.0005, this.trajectories[trajectory].color || new THREE.Color(`hsl(${180*Math.sin( track.times[t]/Math.PI)}, 100%, 50%)`))
+                            this.trajectories[trajectory].add(arrow);
+                        }
+    
+                            }
+                    $('#loading').fadeOut(); //hide();               
+                }, (err) => {
+                    $('#loading').fadeOut();
+                    alert("There was an error loading the character", "Character not loaded");
+                } );
+            }, { filter: true, overflowContainerY: containerArea.root, width: "80%"})
+            
+            scenePanel.addColor("Background", {r: this.performs.scene.background.r, g: this.performs.scene.background.g, b: this.performs.scene.background.b } , (v) => {
+                this.performs.setBackPlaneColour(v);
+            },  { width: "40%" });
+            
+            scenePanel.sameLine();
+            scenePanel.addToggle("Apply Mediapipe", this.applyMediapipe, (v) => {
+                this.applyMediapipe = v;
+              
+            }, { width: "40%" })
+     
+            scenePanel.addColor("Detected 2D landmarks", this.detectedColor, (v) => {
+                this.detectedColor = v;
+            },  { width: "40%" });
+            
+            scenePanel.endLine();
+            const toggle = scenePanel.addToggle("Show 3D Landmarks", this.show3DLandmarks, (v) => {
+                if( !this.applyMediapipe && v) {
+                    LX.popup("You have to enable Mediapipe to show 3D landmarks!");
+                    toggle.set(false)
+                    return;
                 }
-                
-                const track = animation.mixerBodyAnimation.tracks[0];
-                this.trajectoryEnd = track.times.length;
-                for(let trajectory in this.trajectories) {
-                    this.trajectories[trajectory].clear();
-                    let offset = new THREE.Vector3();
-                    for(let t = 0; t < track.times.length-2; t++) {
-                        if(trajectory != "LeftHand" && trajectory != "RightHand") {
-                            this.performs.currentCharacter.model.getObjectByName(this.trajectories[trajectory].name.replace("4", "1")).getWorldPosition(offset);
-                        }
-                
-                        mixer.setTime(track.times[t]);
-                        let position = new THREE.Vector3();
-                        let bone = this.performs.currentCharacter.model.getObjectByName(this.trajectories[trajectory].name);
-                        bone.getWorldPosition(position);
-                        position.sub(offset);
-                        mixer.setTime(track.times[t+1]);
-                        let pos2 = new THREE.Vector3();
-                        bone = this.performs.currentCharacter.model.getObjectByName(this.trajectories[trajectory].name);
-                        bone.getWorldPosition(pos2);
-                        if(trajectory != "LeftHand" && trajectory != "RightHand") {
-                            this.performs.currentCharacter.model.getObjectByName(this.trajectories[trajectory].name.replace("4", "1")).getWorldPosition(offset);
-                        }
-                        pos2.sub(offset);
-                        const arrow = customArrow(pos2.x, pos2.y, pos2.z, position.x, position.y, position.z, 0.0005, this.trajectories[trajectory].color || new THREE.Color(`hsl(${180*Math.sin( track.times[t]/Math.PI)}, 100%, 50%)`))
-                        this.trajectories[trajectory].add(arrow);
-                    }
-
-                        }
-                $('#loading').fadeOut(); //hide();               
-            }, (err) => {
-                $('#loading').fadeOut();
-                alert("There was an error loading the character", "Character not loaded");
-            } );
-        }, { filter: true, overflowContainerY: containerArea.root, width: "80%"})
-        
-        buttonsPanel.addColor("Background", {r: this.performs.scene.background.r, g: this.performs.scene.background.g, b: this.performs.scene.background.b } , (v) => {
-            this.performs.setBackPlaneColour(v);
-        },  { width: "40%" });
-        buttonsPanel.endLine();
-        
-        buttonsPanel.sameLine();
-        buttonsPanel.addToggle("Apply Mediapipe", this.applyMediapipe, (v) => {
-            this.applyMediapipe = v;
-          
-        }, { width: "40%" })
-
-        const toggle = buttonsPanel.addToggle("Show 3D Landmarks", this.show3DLandmarks, (v) => {
-            if( !this.applyMediapipe && v) {
-                LX.popup("You have to enable Mediapipe to show 3D landmarks!");
-                toggle.set(false)
-                return;
+                this.show3DLandmarks = v;
+            }, { width: "40%" })
+    
+            if(this.selectedVideo) {
+                scenePanel.addButton(null, "Open trajectories dialog", () => {
+                    this.showTrajectoryesDialog();
+                }, { width: "40%"} );
             }
-            this.show3DLandmarks = v;
-        }, { width: "40%" })
-        buttonsPanel.endLine();
-
-        buttonsPanel.sameLine();
-        buttonsPanel.addColor("Reference 2D landmarks", this.referenceColor, (v) => {
-            this.referenceColor = v;
-        },  { width: "40%" });
-
-        buttonsPanel.addColor("Detected 2D landmarks", this.detectedColor, (v) => {
-            this.detectedColor = v;
-        },  { width: "40%" });
-        buttonsPanel.endLine();
-
-        buttonsPanel.addButton(null, "Open trajectories dialog", () => {
-            this.showTrajectoryesDialog();
-        })
-
+        }
+        refresh();
         // ------------------------------------------------- Reference sign area -------------------------------------------------
         this.video = document.createElement('video');
         this.video.style="width:100%;position:absolute;";
         this.video.className="hidden";
-        this.video.controls = true;
+        this.video.controls = false;
         leftArea.attach(this.video);
         leftArea.root.style.position = "relative";
         
@@ -415,12 +434,16 @@ class App {
         rightArea.attach(this.sceneCanvas); // three js 3D landmarks
         rightArea.root.style.position = "relative";
         rightArea.onresize = (bounding) => this.delayedResize(bounding.width, bounding.height);
+
+        this.videoEditor = new LX.VideoEditor(leftArea, {  video: this.video, controlsArea: bottomContainer })
+        this.videoEditor.hideControls();
     }
 
     showTrajectoryesDialog() {
         const dialog = new LX.Dialog("Trajectories", (p) => {
             for(let trajectory in this.trajectories) {
-                p.addToggle(`Show ${trajectory}`, this.trajectories[trajectory].visible, (v) => { this.trajectories[trajectory].visible = v; })
+                const t = p.addToggle(`Show ${trajectory}`, this.trajectories[trajectory].visible, (v) => { this.trajectories[trajectory].visible = v; })
+                t.root.getElementsByTagName("input")[0].style.color = this.trajectories[trajectory].color ? this.trajectories[trajectory].color.getHexString() : null;
             }
             
             p.addRange("Frames to show", [this.trajectoryStart, this.trajectoryEnd], (v) => {
@@ -521,6 +544,8 @@ class App {
                     this.originalLandmarks = null;
                 }
             }
+            this.videoEditor.showControls();
+            this.videoEditor._loadVideo({controls: true});
             requestAnimationFrame(this.animate.bind(this));                             
         }
         
