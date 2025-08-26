@@ -362,17 +362,17 @@ class App {
             
             scenePanel.addColor("Background", {r: this.performs.scene.background.r, g: this.performs.scene.background.g, b: this.performs.scene.background.b } , (v) => {
                 this.performs.setBackPlaneColour(v);
-            },  { width: "40%" });
+            },  { nameWidth: "200px", width: "40%" });
             
             scenePanel.sameLine();
             scenePanel.addToggle("Apply Mediapipe", this.applyMediapipe, (v) => {
                 this.applyMediapipe = v;
               
-            }, { width: "40%" })
+            }, { nameWidth: "200px", width: "40%" })
      
             scenePanel.addColor("Detected 2D landmarks", this.detectedColor, (v) => {
                 this.detectedColor = v;
-            },  { width: "40%" });
+            },  { nameWidth: "200px", width: "40%" });
             
             scenePanel.endLine();
             const toggle = scenePanel.addToggle("Show 3D Landmarks", this.show3DLandmarks, (v) => {
@@ -382,7 +382,7 @@ class App {
                     return;
                 }
                 this.show3DLandmarks = v;
-            }, { width: "40%" })
+            }, { nameWidth: "200px", width: "40%" })
     
             if(this.selectedVideo) {
                 scenePanel.addButton(null, "Open trajectories dialog", () => {
