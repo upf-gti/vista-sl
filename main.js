@@ -437,14 +437,13 @@ class App {
 
         this.videoEditor = new LX.VideoEditor(leftArea, {  video: this.video, controlsArea: bottomContainer })
         this.videoEditor.hideControls();
+        this.videoEditor.onSetTime = (t) => {
+        }
     }
 
     showTrajectoryesDialog() {
+    
         const dialog = new LX.Dialog("Trajectories", (p) => {
-            for(let trajectory in this.trajectories) {
-                const t = p.addToggle(`Show ${trajectory}`, this.trajectories[trajectory].visible, (v) => { this.trajectories[trajectory].visible = v; })
-                t.root.getElementsByTagName("input")[0].style.color = this.trajectories[trajectory].color ? this.trajectories[trajectory].color.getHexString() : null;
-            }
             
             p.addRange("Frames to show", [this.trajectoryStart, this.trajectoryEnd], (v) => {
                 this.trajectoryStart = v[0];
@@ -461,7 +460,11 @@ class App {
                 }
             }, {min: 0, max: this.trajectories["LeftHand"].children.length, step: 1});
 
-        })
+            for(let trajectory in this.trajectories) {
+                const t = p.addToggle(`Show ${trajectory}`, this.trajectories[trajectory].visible, (v) => { this.trajectories[trajectory].visible = v; })
+                t.root.getElementsByTagName("input")[0].style.backgroundColor = this.trajectories[trajectory].color ? this.trajectories[trajectory].color.getHexString() : null;
+            }
+        }, {size:["50%", "auto"]})
     }
 
     async loadVideo( signName ) {
@@ -740,15 +743,17 @@ class App {
 
                 if(trajectory != "LeftHand" && trajectory != "RightHand") {
                     const bone = this.performs.currentCharacter.model.getObjectByName(this.trajectories[trajectory].name.replace("4", "1"));
+                    
                     bone.getWorldPosition(this.trajectories[trajectory].position);
                     this.trajectories[trajectory].quaternion.copy(bone.quaternion);
-                    bone.getWorldQuaternion(this.trajectories[trajectory].quaternion);
-                    // if(trajectory.includes("LeftHand")) {
-                    //     this.trajectories[trajectory].quaternion.copy(leftHandRot);
-                    // }
-                    // else {
-                    //     this.trajectories[trajectory].quaternion.copy(rightHandRot);
-                    // }
+                    const q = new THREE.Quaternion();
+                    bone.getWorldQuaternion(q);
+                    if(trajectory.includes("LeftHand")) {
+                        this.trajectories[trajectory].quaternion.premultiply(q);
+                    }
+                    else {
+                        this.trajectories[trajectory].quaternion.premultiply(q);
+                    }
                 }
                 
             }
