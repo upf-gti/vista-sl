@@ -65,6 +65,7 @@
                 const bvhloader = new BVHLoader();
                 loader.load('https://resources.gti.upf.edu/3Dcharacters/Eva_Low/Eva_Low.glb', (gltf) => {
                     const model = gltf.scene;
+                    model.name = "character";
                     scene.add(model);
                     loader.load('animations.glb', (gltf) => {
                         // Assume first animation is the one we want
@@ -76,14 +77,14 @@
                 
                         // Identify hand bones
                         const fingerBoneNames = [
-                            { base: 'mixamorig_RightHandIndex1', tip: 'mixamorig_RightHandIndex4' },
-                            { base: 'mixamorig_RightHandMiddle1', tip: 'mixamorig_RightHandMiddle4' },
-                            { base: 'mixamorig_RightHandRing1', tip: 'mixamorig_RightHandRing4' },
-                            { base: 'mixamorig_RightHandPinky1', tip: 'mixamorig_RightHandPinky4' },
-                            { base: 'mixamorig_RightHandThumb1', tip: 'mixamorig_RightHandThumb3' } // Thumb may have fewer bones
+                            { base: 'mixamorig_LeftHandIndex1', tip: 'mixamorig_LeftHandIndex4' },
+                            { base: 'mixamorig_LeftHandMiddle1', tip: 'mixamorig_LeftHandMiddle4' },
+                            { base: 'mixamorig_LeftHandRing1', tip: 'mixamorig_LeftHandRing4' },
+                            { base: 'mixamorig_LeftHandPinky1', tip: 'mixamorig_LeftHandPinky4' },
+                            { base: 'mixamorig_LeftHandThumb1', tip: 'mixamorig_LeftHandThumb3' } // Thumb may have fewer bones
                         ];
                 
-                        const palm = model.getObjectByName('mixamorig_RightHand');
+                        const palm = model.getObjectByName('mixamorig_LeftHand');
                 
                         if (!palm) {
                             console.warn('No palm bone found');
@@ -95,52 +96,81 @@
                         const duration = clip.duration;
                         const sampleRate = 60; // samples per second
                         const numSamples = Math.floor(duration * sampleRate);
-
                         fingerBoneNames.forEach((finger, i) => {
                             const baseBone = model.getObjectByName(finger.base);
                             const tipBone = model.getObjectByName(finger.tip);
-
+                            
                             if (!baseBone || !tipBone) {
                                 console.warn(`Missing bone: ${finger.base} or ${finger.tip}`);
                                 return;
                             }
-
+                            
                             const points = [];
-
+                            
                             for (let frame = 0; frame < numSamples; frame++) {
                                 const time = (frame / sampleRate);
                                 mixer.setTime(time);
-                                model.updateMatrixWorld(true);
+                                model.updateWorldMatrix(false, true);
 
-                                model.traverse((child) => {
-                                    if (child.isBone || child.isSkinnedMesh) {
-                                        child.updateMatrixWorld(true);
-                                    }
-                                });
+                                // model.traverse((child) => {
+                                //     if (child.isBone || child.isSkinnedMesh) {
+                                //         child.updateMatrix();
+                                //         child.updateMatrixWorld(true);
+                                //     }
+                                // });
+                                
+                                // const baseBone = model.getObjectByName(finger.base);
+                                // const tipBone = model.getObjectByName(finger.tip);
+                                // tipBone.updateMatrix();
+                                // let bone = tipBone;
+
+                                // let matrixWorld = new THREE.Matrix4().copy(bone.matrix);
+                                // while(bone.name != finger.base) {
+                                //     bone.parent.updateMatrix();
+                                //     matrixWorld.premultiply(bone.parent.matrix)
+                                //     bone = bone.parent;
+                                // }
+                                
+                                // // Get global position of tip finger
+                                // const tipWorld = new THREE.Vector3();
+                                // matrixWorld.decompose(tipWorld, new THREE.Quaternion(), new THREE.Vector3());
+                                // //tipBone.getWorldPosition(tipWorld);
+
+                                // // Transform global position to local position of the palm
+                                // palm.updateMatrixWorld(true);
+                                // const palmMatrixWorld = palm.matrixWorld;
+                                // const palmMatrixWorldInverse = new THREE.Matrix4().copy(palmMatrixWorld).invert();
+
+                                // const tipLocal = tipWorld.clone().applyMatrix4(palmMatrixWorldInverse);
+
+
+                                // points.push(tipLocal.clone());
+                                // points.push(tipWorld);
+
+
                                 // Get global position of tip finger
                                 const tipWorld = new THREE.Vector3();
+                                const tipBone = model.getObjectByName(finger.tip);
                                 tipBone.getWorldPosition(tipWorld);
 
-                                // Transform global position to local position of the palm
-                                const palmMatrixWorld = palm.matrixWorld;
-                                const palmMatrixWorldInverse = new THREE.Matrix4().copy(palmMatrixWorld).invert();
+                                const palmPosition = new THREE.Vector3();
+                                palm.getWorldPosition(palmPosition);
 
-                                const tipLocal = tipWorld.clone().applyMatrix4(palmMatrixWorldInverse);
-
-                                points.push(tipLocal.clone());
+                                tipWorld.sub(palmPosition);
+                                points.push(tipWorld);
                             }
 
                             // Create geometry
                             const geometry = new THREE.BufferGeometry().setFromPoints(points);
                             const material = new THREE.LineBasicMaterial({
                                 color: new THREE.Color(`hsl(${i * 60}, 100%, 50%)`),
-                                depthTest: false
                             });
                             const line = new THREE.Line(geometry, material);
 
                             // Add line as a palm child
-                            palm.add(line);
+                            model.add(line);
                             handTrajectories.push(line);
+                        mixer.timeScale = 0.1;
 
                         });
                 
@@ -155,7 +185,11 @@
 
                 const delta = clock.getDelta();
                 if (mixer) mixer.update(delta);
-
+                const palm = scene.getObjectByName("mixamorig_LeftHand");
+                const palmPosition = palm.getWorldPosition(new THREE.Vector3());
+                for(let i = 0; i < handTrajectories.length; i++) {
+                    handTrajectories[i].position.copy(palmPosition);
+                }
                 renderer.render(scene, camera);
             }
 

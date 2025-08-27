@@ -139,7 +139,7 @@ class App {
             else if(t.includes("Pinky")) {
                 this.trajectories[t].color = new THREE.Color("#16262E");
             }
-            // this.performs.scene.add(this.trajectories[t]);
+            this.performs.scene.add(this.trajectories[t]);
         }
         
         await this.createGUI();
@@ -187,106 +187,7 @@ class App {
                             this.performs.keyframeApp.changePlayState(false);
                             const animation = this.performs.keyframeApp.bindedAnimations[animationName][this.performs.currentCharacter.model.name];
                             this.computeTrajectories(animation);
-                            // let boneName = null;
-                            
-                            // for(let i = 0; i < animation.mixerBodyAnimation.tracks.length; i++) {
-                            //     const track = animation.mixerBodyAnimation.tracks[i]
-                            //     const trackName = track.name;
-                            //     for(let trajectory in this.trajectories) {
-    
-                            //         if(trackName.includes(trajectory+".")) {
-                            //             boneName = trackName.replace(".quaternion", "");
-                            //             if(boneName) {
-                            //                 this.trajectories[trajectory].name = boneName;
-                            //                 // if(trajectory != "LeftHand" && trajectory != "RightHand") {
-                            //                 //     this.trajectories[trajectory].position.copy(this.performs.currentCharacter.model.getObjectByName(this.trajectories[trajectory].name.replace("4", "1")).position);
-                            //                 // }
-                            //                 break;
-                            //                 // let position = new THREE.Vector3();
-                            //                 // bone.getWorldPosition(position);
-                            //                 // positions.push(position);
-                            //                 // for(let t = 0; t < track.times.length*4; t=+4) {
-                            //                     //     let q = new THREE.Quaternion(track.values[t], track.values[t+1], track.values[t+2], track.values[t+3]);
-                                                
-                            //                     //     positions.push(position);
-                            //                 // }
-                            //             }
-                            //         }
-                            //     }
-                            // }
-                            
-                            // const mixer = this.performs.currentCharacter.mixer;
-                            // const track = animation.mixerBodyAnimation.tracks[0];
-                            // this.trajectoryEnd = track.times.length;
-                            // for(let trajectory in this.trajectories) {
-                            //     this.trajectories[trajectory].clear();
-                            //     // let offset = new THREE.Vector3();
-                            //     // for(let t = 0; t < track.times.length-2; t++) {
-                            //     //     if(trajectory != "LeftHand" && trajectory != "RightHand") {
-                            //     //         this.performs.currentCharacter.model.getObjectByName(this.trajectories[trajectory].name.replace("4", "1")).getWorldPosition(offset);
-                            //     //     }
-                            
-                            //     //     mixer.setTime(track.times[t]);
-                            //     //     let position = new THREE.Vector3();
-                            //     //     let bone = this.performs.currentCharacter.model.getObjectByName(this.trajectories[trajectory].name);
-                            //     //     bone.getWorldPosition(position);
-                            //     //     position.sub(offset);
-                            //     //     mixer.setTime(track.times[t+1]);
-                            //     //     let pos2 = new THREE.Vector3();
-                            //     //     bone = this.performs.currentCharacter.model.getObjectByName(this.trajectories[trajectory].name);
-                            //     //     bone.getWorldPosition(pos2);
-                            //     //     if(trajectory != "LeftHand" && trajectory != "RightHand") {
-                            //     //         this.performs.currentCharacter.model.getObjectByName(this.trajectories[trajectory].name.replace("4", "1")).getWorldPosition(offset);
-                            //     //     }
-                            //     //     pos2.sub(offset);
-                            //     //     const arrow = customArrow(pos2.x, pos2.y, pos2.z, position.x, position.y, position.z, 0.0005, this.trajectories[trajectory].color || new THREE.Color(`hsl(${180*Math.sin( track.times[t]/Math.PI)}, 100%, 50%)`))
-                            //     //     this.trajectories[trajectory].add(arrow);
-                            //     // }
-                                
-                                
-                            //     let parentMatrixWorld = new THREE.Matrix4().identity();
-                            //     for(let t = 0; t < track.times.length-2; t++) {
-                            //         mixer.setTime(track.times[t]);
-                                    
-                            //         if(trajectory == "LeftHand" && trajectory == "RightHand") {
-                            //             parentMatrixWorld = this.performs.currentCharacter.model.getObjectByName(this.trajectories[trajectory].name.replace("4", "1")).matrixWorld;
-                            //             parentMatrixWorld.invert();
-                            //         }                           
-                            //         let bone = this.performs.currentCharacter.model.getObjectByName(this.trajectories[trajectory].name);
-                            //         const firstBoneMatrix = bone.matrixWorld.clone();
-                                    
-                            //         mixer.setTime(track.times[t+1]);
-                            //         bone = this.performs.currentCharacter.model.getObjectByName(this.trajectories[trajectory].name);
-                            //         const lastBoneMatrix = bone.matrixWorld.clone();
-                                    
-                            //         firstBoneMatrix.multiply(parentMatrixWorld);
-                            //         lastBoneMatrix.multiply(parentMatrixWorld);
-                                    
-                            //         const firstPosition = new THREE.Vector3();
-                            //         const lastPosition = new THREE.Vector3();
-                            //         firstBoneMatrix.decompose(firstPosition, new THREE.Quaternion(), new THREE.Vector3());
-                            //         lastBoneMatrix.decompose(lastPosition, new THREE.Quaternion(), new THREE.Vector3());
-
-                            //         const arrow = customArrow(lastPosition.x, lastPosition.y, lastPosition.z, firstPosition.x, firstPosition.y, firstPosition.z, 0.0005, this.trajectories[trajectory].color || new THREE.Color(`hsl(${180*Math.sin( track.times[t]/Math.PI)}, 100%, 50%)`))
-                            //         this.trajectories[trajectory].add(arrow);
-                            //     }
-                            //     if(trajectory == "LeftHandIndex4") {
-
-                            //         const geometry = new THREE.SphereGeometry( 0.1, 32, 16 ); 
-                            //         const material = new THREE.MeshBasicMaterial( { color: 0xffff00, depthTest: false } ); 
-                            //         const sphere = new THREE.Mesh( geometry, material );
-                            //         sphere.scale.set(0.1,0.1,0.1);
-                            //         // sphere.position.copy(this.trajectories[trajectory].position);
-                            //         // this.performs.scene.add(sphere);
-                            //         const sp = sphere.clone();
-                            //         sp.name = "LeftHandIndex4_origin";
-                            //         sp.position.copy(this.trajectories[trajectory].children[0].position);
-                            //         this.performs.scene.add(sp);
-                            //     }
-                            // }
-                            // mixer.setTime(0.0);                      
-    
-                           
+                            // this.computeTipTrajectories(animation);
                         })
                         this.buildAnimation = false;
                     }
@@ -360,10 +261,10 @@ class App {
 
                     const leftHand = this.performs.currentCharacter.model.getObjectByName("LeftHand") || this.performs.currentCharacter.model.getObjectByName("mixamorig_LeftHand")
                     const rightHand = this.performs.currentCharacter.model.getObjectByName("RightHand") || this.performs.currentCharacter.model.getObjectByName("mixamorig_RightHand")
-                    for(let t in this.trajectories) {
-                        let name = this.trajectories[t].name.replace("4","1").replace("3","1");
-                        this.performs.currentCharacter.model.getObjectByName(name).add(this.trajectories[t]);
-                    }
+                    // for(let t in this.trajectories) {
+                    //     let name = this.trajectories[t].name.replace("4","1").replace("3","1");
+                    //     this.performs.currentCharacter.model.getObjectByName(name).add(this.trajectories[t]);
+                    // }
                     const track = animation.mixerBodyAnimation.tracks[0];
                     this.trajectoryEnd = track.times.length;
                     // for(let trajectory in this.trajectories) {
@@ -483,66 +384,201 @@ class App {
     computeTrajectories( animation ) {
 
         let boneName = null;
+        
         for(let i = 0; i < animation.mixerBodyAnimation.tracks.length; i++) {
             const track = animation.mixerBodyAnimation.tracks[i]
             const trackName = track.name;
             for(let trajectory in this.trajectories) {
-                this.trajectories[trajectory].clear();
+
                 if(trackName.includes(trajectory+".")) {
                     boneName = trackName.replace(".quaternion", "");
                     if(boneName) {
-                        this.trajectories[trajectory].name = boneName;                        
+                        this.trajectories[trajectory].name = boneName;                       
                         break;                        
                     }
                 }
             }
         }
-        
         const mixer = this.performs.currentCharacter.mixer;
         const track = animation.mixerBodyAnimation.tracks[0];
         this.trajectoryEnd = track.times.length;
 
-        const trajectoriesTransforms = {};
-
-        for(let t = 0; t < track.times.length; t++) {
-
-            mixer.setTime(track.times[t]);
-            this.performs.currentCharacter.model.updateMatrixWorld(true);
-            for(let trajectory in this.trajectories) {
-                let name = this.trajectories[trajectory].name;
-                // if(trajectory != "LeftHand" && trajectory != "RightHand") {
-                //     name = this.trajectories[trajectory].name.replace("4", "1")
-                // }
-                const bone = this.performs.currentCharacter.model.getObjectByName(name);
-                bone.updateMatrix();
-                bone.updateMatrixWorld(true);
-                
-                if(!trajectoriesTransforms[trajectory]) {
-                    trajectoriesTransforms[trajectory] = [];
+        for(let trajectory in this.trajectories) {
+            this.trajectories[trajectory].clear();
+            
+            let handPosition = new THREE.Vector3();
+            const q = new THREE.Quaternion();
+            const points = [];
+            for(let t = 0; t < track.times.length-2; t++) {
+                mixer.setTime(track.times[t]);
+                if(trajectory != "LeftHand" && trajectory != "RightHand") {
+                    // this.performs.currentCharacter.model.getObjectByName(this.trajectories[trajectory].name.replace("4", "1")).getWorldPosition(handPosition);
+                    this.performs.currentCharacter.model.getObjectByName(this.trajectories[trajectory].name.includes("LeftHand") ? this.trajectories["LeftHand"].name : this.trajectories["RightHand"].name).getWorldPosition(handPosition);
+                    this.performs.currentCharacter.model.getObjectByName(this.trajectories[trajectory].name.includes("LeftHand") ? this.trajectories["LeftHand"].name : this.trajectories["RightHand"].name).getWorldQuaternion(q);
+                    q.invert();
                 }
-                const matrix = bone.matrix.clone();
-                trajectoriesTransforms[trajectory].push(bone.matrixWorld.clone());
+                
+                let position = new THREE.Vector3();
+                let bone = this.performs.currentCharacter.model.getObjectByName(this.trajectories[trajectory].name);
+                bone.getWorldPosition(position);
+                position.sub(handPosition);
+
+                mixer.setTime(track.times[t+1]);
+                let position2 = new THREE.Vector3();
+                bone = this.performs.currentCharacter.model.getObjectByName(this.trajectories[trajectory].name);
+                bone.getWorldPosition(position2);
+                if(trajectory != "LeftHand" && trajectory != "RightHand") {
+                    this.performs.currentCharacter.model.getObjectByName(this.trajectories[trajectory].name.includes("LeftHand") ? this.trajectories["LeftHand"].name : this.trajectories["RightHand"].name).getWorldPosition(handPosition);
+                }
+                position2.sub(handPosition);
+
+                const arrow = customArrow(position2.x, position2.y, position2.z, position.x, position.y, position.z, 0.0005, this.trajectories[trajectory].color || new THREE.Color(`hsl(${180*Math.sin( track.times[t]/Math.PI)}, 100%, 50%)`))
+                this.trajectories[trajectory].add(arrow);
+                points.push(position);
+            }
+            // const geometry = new THREE.BufferGeometry().setFromPoints(points);
+            // const material = new THREE.LineBasicMaterial({
+            //     color: this.trajectories[trajectory].color,
+            //     depthTest: false
+            // });
+            // const line = new THREE.Line(geometry, material);
+
+            // this.trajectories[trajectory].add(line);
+        }
+    }
+
+    computeTipTrajectories( animation ) {
+        let boneName = null;
+        
+        for(let i = 0; i < animation.mixerBodyAnimation.tracks.length; i++) {
+            const track = animation.mixerBodyAnimation.tracks[i]
+            const trackName = track.name;
+            for(let trajectory in this.trajectories) {
+
+                if(trackName.includes(trajectory+".")) {
+                    boneName = trackName.replace(".quaternion", "");
+                    if(boneName) {
+                        this.trajectories[trajectory].name = boneName;                       
+                        break;                        
+                    }
+                }
             }
         }
-        mixer.setTime(0.0);
-        for(let trajectory in trajectoriesTransforms) {
-            let parentMatrixWorld = new THREE.Matrix4().identity();
+        const mixer = this.performs.currentCharacter.mixer;
+        const track = animation.mixerBodyAnimation.tracks[0];
+        this.trajectoryEnd = track.times.length;
 
-            for(let i = 0; i < trajectoriesTransforms[trajectory].length - 1; i++) {
-                if(trajectory != "LeftHand" && trajectory != "RightHand") {
-                    parentMatrixWorld = trajectory.includes("LeftHand") ? trajectoriesTransforms["LeftHand"][i] : trajectoriesTransforms["RightHand"][i];
-                    parentMatrixWorld.invert();
+        for(let trajectory in this.trajectories) {
+            // this.trajectories[trajectory].clear();
+            
+            let handPosition = new THREE.Vector3();
+            const q = new THREE.Quaternion();
+            const points = [];
+            let bone = this.performs.currentCharacter.model.getObjectByName(this.trajectories[trajectory].name);
+            for(let t = 0; t < track.times.length-2; t++) {
+                mixer.setTime(track.times[t]);
+                bone.updateMatrixWorld( true )
+                let position = new THREE.Vector3();
+                bone.matrix.decompose(position, new THREE.Quaternion(), new THREE.Vector3());
+                // bone.position.clone();
+
+                mixer.setTime(track.times[t+1]);
+                
+                // let position2 = bone.position.clone();
+                bone.updateMatrixWorld( true );
+                let position2 = new THREE.Vector3();
+                bone.matrix.decompose(position2, new THREE.Quaternion(), new THREE.Vector3());
+
+                const arrow = customArrow(position2.x, position2.y, position2.z, position.x, position.y, position.z, 0.0005, this.trajectories[trajectory].color || new THREE.Color(`hsl(${180*Math.sin( track.times[t]/Math.PI)}, 100%, 50%)`))
+                this.trajectories[trajectory].add(arrow);
+                points.push(position);
+            }
+            const geometry = new THREE.BufferGeometry().setFromPoints(points);
+            const material = new THREE.LineBasicMaterial({
+                color: this.trajectories[trajectory].color,
+                depthTest: true
+            });
+            const line = new THREE.Line(geometry, material);
+            bone.add(line);
+            this.trajectories[trajectory].add(line);
+        }
+    }
+
+    compute( animation ) {
+        let boneName = null;
+        
+        for(let i = 0; i < animation.mixerBodyAnimation.tracks.length; i++) {
+            const track = animation.mixerBodyAnimation.tracks[i]
+            const trackName = track.name;
+            for(let trajectory in this.trajectories) {
+
+                if(trackName.includes(trajectory+".")) {
+                    boneName = trackName.replace(".quaternion", "");
+                    if(boneName) {
+                        this.trajectories[trajectory].name = boneName;
+                        break;
+                    }
                 }
-                const firstBoneMatrix = trajectoriesTransforms[trajectory][i];
-                firstBoneMatrix.premultiply(parentMatrixWorld);
-                const lastBoneMatrix = trajectoriesTransforms[trajectory][i+1];
-                lastBoneMatrix.premultiply(parentMatrixWorld);
+            }
+        }
+        const mixer = this.performs.currentCharacter.mixer;
+        const track = animation.mixerBodyAnimation.tracks[0];
+        this.trajectoryEnd = track.times.length;
 
-                const firstPosition = new THREE.Vector3();
-                firstBoneMatrix.decompose(firstPosition, new THREE.Quaternion(), new THREE.Vector3());
-                const lastPosition = new THREE.Vector3();
-                lastBoneMatrix.decompose(lastPosition, new THREE.Quaternion(), new THREE.Vector3());
-                const arrow = customArrow(lastPosition.x, lastPosition.y, lastPosition.z, firstPosition.x, firstPosition.y, firstPosition.z, 0.0005, this.trajectories[trajectory].color || new THREE.Color(`hsl(${180*Math.sin( track.times[i]/Math.PI)}, 100%, 50%)`))
+        for(let trajectory in this.trajectories) {
+            this.trajectories[trajectory].clear();
+        
+            for(let t = 0; t < track.times.length-2; t++) {
+                
+                mixer.setTime(track.times[t]);
+                let bone = this.performs.currentCharacter.model.getObjectByName(this.trajectories[trajectory].name);
+                let position = new THREE.Vector3();
+                if(trajectory != "LeftHand" && trajectory != "RightHand") {
+                    bone.updateMatrix();
+                    let auxMatrix = bone.matrix.clone();
+                    let parentName = bone.name.replace("mixamorig","").replaceAll("_","").replaceAll(":","");
+                    let parentPos = new THREE.Vector3();
+                    // while(parentName != "LeftHand" && parentName != "RightHand" ) { // Convert finger's matrix from local space to hand space (auxMatrix)
+                    while(!parentName.includes("1")) { // Convert finger's matrix from local space to hand space (auxMatrix)
+                        bone.parent.updateMatrix();
+                        parentPos.copy(bone.parent.position);
+                        auxMatrix.premultiply(bone.parent.matrix);
+                        bone = bone.parent;
+                        parentName = bone.name.replace("mixamorig","").replaceAll("_","").replaceAll(":","")
+                    }
+                    auxMatrix.decompose(position, new THREE.Quaternion(), new THREE.Vector3());
+                    position.sub(parentPos);
+                    
+                }
+                else {
+                    bone.getWorldPosition(position);
+                }
+                mixer.setTime(track.times[t+1]);
+                
+                let position2 = new THREE.Vector3();
+                bone = this.performs.currentCharacter.model.getObjectByName(this.trajectories[trajectory].name);
+                if(trajectory != "LeftHand" && trajectory != "RightHand") {
+                    bone.updateMatrix();
+                    let auxMatrix = bone.matrix.clone();
+                    let parentName = bone.name.replace("mixamorig","").replaceAll("_","").replaceAll(":","");
+                    let parentPos = new THREE.Vector3();
+                    // while(parentName != "LeftHand" && parentName != "RightHand" ) { // Convert finger's matrix from local space to hand space (auxMatrix)
+                    while(!parentName.includes("1")) { // Convert finger's matrix from local space to hand space (auxMatrix)
+                        bone.parent.updateMatrix();
+                        bone.parent.getWorldPosition(parentPos)
+                        parentPos.copy(bone.parent.position);
+                        auxMatrix.premultiply(bone.parent.matrix);
+                        bone = bone.parent;
+                        parentName = bone.name.replace("mixamorig","").replaceAll("_","").replaceAll(":","")
+                    }
+                    auxMatrix.decompose(position2, new THREE.Quaternion(), new THREE.Vector3());
+                    position2.sub(parentPos);
+                    
+                }
+                else {
+                    bone.getWorldPosition(position2);
+                }
+                const arrow = customArrow(position2.x, position2.y, position2.z, position.x, position.y, position.z, 0.0005, this.trajectories[trajectory].color || new THREE.Color(`hsl(${180*Math.sin( track.times[t]/Math.PI)}, 100%, 50%)`))
                 this.trajectories[trajectory].add(arrow);
             }
         }
@@ -567,7 +603,24 @@ class App {
                 }
             }, {min: 0, max: this.trajectories["LeftHand"].children.length, step: 1});
 
+            const leftTrajectories = {};
+            const rightTrajectories = {};
             for(let trajectory in this.trajectories) {
+                if(trajectory.includes("Left")) {
+                    leftTrajectories[trajectory] = this.trajectories[trajectory];
+                }
+                else {
+                    rightTrajectories[trajectory] = this.trajectories[trajectory];
+                }
+            }
+            p.branch("Left Hand");
+            for(let trajectory in leftTrajectories) {
+                const t = p.addToggle(`Show ${trajectory}`, this.trajectories[trajectory].visible, (v) => { this.trajectories[trajectory].visible = v; })
+                t.root.getElementsByTagName("input")[0].style.backgroundColor = this.trajectories[trajectory].color ? this.trajectories[trajectory].color.getHexString() : null;
+            }
+
+            p.branch("Right Hand");
+            for(let trajectory in rightTrajectories) {
                 const t = p.addToggle(`Show ${trajectory}`, this.trajectories[trajectory].visible, (v) => { this.trajectories[trajectory].visible = v; })
                 t.root.getElementsByTagName("input")[0].style.backgroundColor = this.trajectories[trajectory].color ? this.trajectories[trajectory].color.getHexString() : null;
             }
@@ -840,49 +893,15 @@ class App {
     
             this.mediapipeScene.renderer.render(this.mediapipeScene.scene, this.performs.cameras[this.performs.camera]);
         }
-        // if(this.performs.keyframeApp.playing) {
-            let leftHandRot = new THREE.Quaternion();
-            this.performs.currentCharacter.model.getObjectByName(this.trajectories["LeftHand"].name).getWorldQuaternion(leftHandRot);
-            let rightHandRot = new THREE.Quaternion();
-            this.performs.currentCharacter.model.getObjectByName(this.trajectories["RightHand"].name).getWorldQuaternion(rightHandRot);
+ 
+        for(let trajectory in this.trajectories) {
 
-            for(let trajectory in this.trajectories) {
-
-                if(trajectory != "LeftHand" && trajectory != "RightHand") {
-                    const bone = this.performs.currentCharacter.model.getObjectByName(this.trajectories[trajectory].name.replace("4", "1"));
-                    
-                    // bone.getWorldPosition(this.trajectories[trajectory].position);
-                    if(trajectory == "LeftHandIndex4") {
-                        const sp = this.performs.scene.getObjectByName("LeftHandIndex4_origin");
-                        if(sp) {
-                            sp.position.copy(this.trajectories[trajectory].position);
-                        }
-                    }
-                    // //this.trajectories[trajectory].quaternion.copy(bone.quaternion);
-                    // const q = new THREE.Quaternion();
-                    // bone.getWorldQuaternion(q);
-                    // if(trajectory.includes("LeftHand")) {
-                    //     this.trajectories[trajectory].quaternion.copy(q).multiply(leftHandRot.clone().invert());
-                    // }
-                    // else {
-                    //     this.trajectories[trajectory].quaternion.copy(q).multiply(rightHandRot.clone().invert());
-                    // }
-                }
-                
-            }
-        // }
-
-        if(this.buildAnimation) {
-            // this.debugCanvas.height = this.video.videoHeight;
-            // this.debugCanvas.width  = this.video.videoWidth;
-            // this.video.parentElement.prepend(this.debugCanvas)
-            // const ctx = this.debugCanvas.getContext("2d");
-            // ctx.drawImage(this.video, 0, 0, this.debugCanvas.width, this.debugCanvas.height);
-            // const bitmap = await createImageBitmap(this.debugCanvas);
-            // const detectedLandmarks = this.poseLandmarker.detect(bitmap);
-            // bitmap.close();
-            // createBodyAnimationFromWorldLandmarks( detectedLandmarks.worldLandmarksArray, this.performs.currentCharacter.skeleton )
+            if(trajectory != "LeftHand" && trajectory != "RightHand") {
+                this.performs.currentCharacter.model.getObjectByName(this.trajectories[trajectory].name.includes("LeftHand") ? this.trajectories["LeftHand"].name : this.trajectories["RightHand"].name).getWorldPosition(this.trajectories[trajectory].position);
+                // this.performs.currentCharacter.model.getObjectByName(this.trajectories[trajectory].name).getWorldPosition(this.trajectories[trajectory].position);
+            }            
         }
+      
         requestAnimationFrame(this.animate.bind(this));
     }
 }
