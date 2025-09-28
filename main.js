@@ -95,6 +95,7 @@ class App {
         }
         this.trajectoryStart = 0;
         this.trajectoryEnd = 100;
+        this.trajectoryWindow = 20;
         window.addEventListener( 'resize', this.onWindowResize.bind(this) );
     }
 
@@ -125,6 +126,7 @@ class App {
             else if(t.includes("Pinky")) {
                 this.trajectories[t].color = new THREE.Color("#C3E991");//"#16262E");
             }
+            this.trajectories[t].thickness = 2;
             // this.performs.scene.add(this.trajectories[t]);
         }
         
@@ -386,8 +388,10 @@ class App {
         for(let trajectory in this.trajectories) {
             this.trajectories[trajectory].clear();
             const boneName = this.trajectories[trajectory].name;
-            for(let t = 0; t < track.times.length-2; t++) {
-                
+            const positions = [];
+            const colors = [];
+
+            for(let t = 0; t < track.times.length-1; t++) {
                 // First frame
                 mixer.setTime(track.times[t]);
                 this.performs.currentCharacter.model.updateMatrixWorld(true);
@@ -411,11 +415,11 @@ class App {
                 else { // For hand trajectory : Get global position of the wrist
                     bone.getWorldPosition(localPosition);
                 }
-
+                
                 // Second frame
                 mixer.setTime(track.times[t+1]);
                 this.performs.currentCharacter.model.updateMatrixWorld(true);
-
+                
                 const bone2 = this.performs.currentCharacter.model.getObjectByName(boneName);
                 let localPosition2 = new THREE.Vector3();
                 
@@ -423,30 +427,78 @@ class App {
                 if(!isHand) { // For fingers trajectories: Get fingertip position relative to the first joint of the finger    
                     const root2 = findFirstFingerJoint(bone2);
                     if (!bone2 || !root2) continue;
-
+                    
                     const tipWorldMatrix2 = bone2.matrixWorld.clone();
                     rootWorldMatrix2 = root2.matrixWorld.clone();
                     const rootWorldInverse2 = new THREE.Matrix4().copy(rootWorldMatrix2).invert();
-
+                    
                     const localMatrix2 = new THREE.Matrix4().multiplyMatrices(rootWorldInverse2, tipWorldMatrix2);
                     localPosition2 = new THREE.Vector3().setFromMatrixPosition(localMatrix2);
                 } else { // For hand trajectory : Get global position of the wrist
                     bone2.getWorldPosition(localPosition2);
                 }
-
+                
                 const position = localPosition.clone();
                 const position2 = localPosition2.clone()
+                
+                positions.push(position.x, position.y, position.z);
+                const color = this.trajectories[trajectory].color || new THREE.Color(`hsl(${180*Math.sin( track.times[t]/Math.PI)}, 100%, 50%)`);
+                colors.push(color.r, color.g, color.b, 1);
 
-                const arrow = customArrow(position2.x, position2.y, position2.z, position.x, position.y, position.z, 0.0005, this.trajectories[trajectory].color || new THREE.Color(`hsl(${180*Math.sin( track.times[t]/Math.PI)}, 100%, 50%)`))
+                const arrow = customArrow(position2.x, position2.y, position2.z, position.x, position.y, position.z, this.trajectories[trajectory].thickness*0.0005, this.trajectories[trajectory].color || new THREE.Color(`hsl(${180*Math.sin( track.times[t]/Math.PI)}, 100%, 50%)`))
+                arrow.name = t;
                 this.trajectories[trajectory].add(arrow);
             }
+            // Create geometry
+            const geometry = new MagicLineGeometry();
+            geometry.setPositions(positions);
+            geometry.setColors(colors);
+            const material = new LineMaterial({
+                // color: new THREE.Color(`hsl(${i * 60}, 100%, 50%)`), linewidth: 1, // in world units with size attenuation, pixels otherwise
+                // color: this.trakectories[trajectory].color,
+                vertexColors: true,
+                dashed: false,
+                alphaToCoverage: false,
+                linewidth: this.trajectories[trajectory].thickness,
+                fragmentShader: fragmentShader,
+                transparent: true
+            });
+            material.resolution.set(window.innerWidth, window.innerHeight);
+
+            const line = new Line2(geometry, material);
+            line.name = "line";
+            this.trajectories[trajectory].add(line);
+            this.trajectories[trajectory].positions = positions;
+            this.trajectories[trajectory].colors = colors;
         }
     }
 
     showTrajectories( startFrame = this.trajectoryStart, endFrame = this.trajectoryEnd) {
         for(let trajectory in this.trajectories) {
+            let positions = this.trajectories[trajectory].positions;
+            let colors = this.trajectories[trajectory].colors;
             for(let i = 0; i < this.trajectories[trajectory].children.length; i++) {
-                if(i < startFrame  || i > endFrame) {
+                if(this.trajectories[trajectory].children[i].name == "line") {
+                    //positions = positions.slice(startFrame*3, (endFrame+2)*3);
+                    //colors = colors.slice(startFrame*3, (endFrame+2)*3);
+                    const totalFrames = positions.length/3;
+                    for(let frame = 0; frame < totalFrames; frame++) {
+                        
+                        let alpha = 0;
+                        if(frame < startFrame) {
+                            alpha = (frame - startFrame)/startFrame;   
+                        }
+                        else if(frame > endFrame) {
+                            alpha = (endFrame - frame)/(totalFrames - endFrame);   
+                        }
+                        colors[frame*4+3] = Math.max(0,Math.min(1,1 + alpha));
+                    }
+                    //this.trajectories[trajectory].children[i].geometry.setPositions(positions);
+                    this.trajectories[trajectory].children[i].geometry.setColors(colors);
+                    continue;
+                }
+                const frame = Number(this.trajectories[trajectory].children[i].name);
+                if(frame < startFrame  || frame > endFrame) {
                     this.trajectories[trajectory].children[i].visible = false;
                 }
                 else {
@@ -467,6 +519,10 @@ class App {
                 this.trajectoryEnd = v[1];
                 this.showTrajectories( this.trajectoryStart, this.trajectoryEnd);
             }, {min: 0, max: this.trajectories["LeftHand"].children.length, step: 1});
+
+            p.addNumber("Window", this.trajectoryWindow, (v) => {
+                this.trajectoryWindow = v;
+            }, {min: 0, max: Math.ceil((this.trajectories["LeftHand"].children.length - 1)/2), step: 1});
 
             const leftTrajectories = {};
             const rightTrajectories = {};
@@ -491,8 +547,15 @@ class App {
                     refreshLeft();
                 });
                 for(let trajectory in leftTrajectories) {
-                    const t = leftHand.addToggle(`Show ${trajectory}`, this.trajectories[trajectory].visible, (v) => { this.trajectories[trajectory].visible = v; })
+                    leftHand.addSeparator();
+                    leftHand.sameLine(2);
+                    const t = leftHand.addToggle(`Show ${trajectory}`, this.trajectories[trajectory].visible, (v) => { this.trajectories[trajectory].visible = v; }, {nameWidth: "170px"})
                     t.root.getElementsByTagName("input")[0].style.backgroundColor = this.trajectories[trajectory].color ? this.trajectories[trajectory].color.getHexString() : null;
+                    leftHand.addNumber("Width", this.trajectories[trajectory].thickness, (v) => {
+                        this.trajectories[trajectory].thickness = v;
+                        this.trajectories[trajectory].getObjectByName("line").material.linewidth = v;
+                    }, {min: 1, max: 30, width: "150px"});
+
                 }
             }
             refreshLeft();
@@ -509,8 +572,16 @@ class App {
                     refreshRight();
                 });
                 for(let trajectory in rightTrajectories) {
-                    const t = rightHand.addToggle(`Show ${trajectory}`, this.trajectories[trajectory].visible, (v) => { this.trajectories[trajectory].visible = v; })
+                    rightHand.addSeparator();
+                    rightHand.sameLine(2);
+                    const t = rightHand.addToggle(`Show ${trajectory}`, this.trajectories[trajectory].visible, (v) => { this.trajectories[trajectory].visible = v;}, {nameWidth: "170px"})
                     t.root.getElementsByTagName("input")[0].style.backgroundColor = this.trajectories[trajectory].color ? this.trajectories[trajectory].color.getHexString() : null;
+                
+                    rightHand.addNumber("Width", this.trajectories[trajectory].thickness, (v) => {
+                        this.trajectories[trajectory].thickness = v;
+                        this.trajectories[trajectory].getObjectByName("line").material.linewidth = v;
+                    }, {min: 1, max: 30, width: "150px"});
+
                 }
             }
             refreshRight();
@@ -518,7 +589,7 @@ class App {
             area.attach(rightHand);
             p.attach(area);
             
-        }, {size:["40%", "auto"], draggable: true})
+        }, {size:["50%", "auto"], draggable: true, })
     }
 
     async loadVideo( signName ) {
@@ -793,13 +864,58 @@ class App {
             if(trajectory != "LeftHand" && trajectory != "RightHand") {
               // this.performs.currentCharacter.model.getObjectByName(this.trajectories[trajectory].name.includes("LeftHand") ? this.trajectories["LeftHand"].name : this.trajectories["RightHand"].name).getWorldPosition(this.trajectories[trajectory].position);
                 // this.performs.currentCharacter.model.getObjectByName(this.trajectories[trajectory].name).getWorldPosition(this.trajectories[trajectory].position);
-            }            
+            }          
+        }
+        const mixer = this.performs.currentCharacter.mixer;
+        const action = mixer._actions[0];
+        const frame = getFrameIndex(action);
+
+        const startFrame = Math.max(0,frame - Math.ceil(this.trajectoryWindow/2));
+        const endFrame = frame + Math.ceil(this.trajectoryWindow/2);
+        for(let trajectory in this.trajectories) {
+            let positions = this.trajectories[trajectory].positions;
+            let colors = this.trajectories[trajectory].colors;
+            for(let i = 0; i < this.trajectories[trajectory].children.length; i++) {
+                if(this.trajectories[trajectory].children[i].name == "line") {
+                    // positions = positions.slice(startFrame*3, (endFrame+2)*3);
+                    // colors = colors.slice(startFrame*3, (endFrame+2)*3);
+                    // this.trajectories[trajectory].children[i].geometry.setPositions(positions);
+                    const totalFrames = positions.length/3;
+                    for(let frame = 0; frame < totalFrames; frame++) {
+                        
+                        let alpha = 0;
+                        if(frame < startFrame) {
+                            alpha = (frame - startFrame)/startFrame;   
+                        }
+                        else if(frame > endFrame) {
+                            alpha = (endFrame - frame)/(totalFrames - endFrame);   
+                        }
+                        colors[frame*4+3] = Math.max(0,Math.min(1,1 + alpha));
+                    }
+                    //this.trajectories[trajectory].children[i].geometry.setPositions(positions);
+                    this.trajectories[trajectory].children[i].geometry.setColors(colors);
+                    continue;
+                }
+                const frame = Number(this.trajectories[trajectory].children[i].name);
+                if(frame < startFrame  || frame > endFrame) {
+                    this.trajectories[trajectory].children[i].visible = false;
+                }
+                else {
+                    this.trajectories[trajectory].children[i].visible = true;
+                }
+            }
         }
       
         requestAnimationFrame(this.animate.bind(this));
     }
 }
 
+const getFrameIndex = (action, ) => {
+    const animationTime = action.time;
+    const times = action._clip.tracks[0].times;
+    const frameCount = Math.round( 1 / (times[4] - times[3]) );
+    return Math.round(animationTime / action.getClip().duration * frameCount)
+}
 const transformLandmarks = (originalLandmarks, newLandmarks) => {
     // Assume originalLandmarks and newLandmarks are arrays of landmarks
     // and originalLandmarks[0] and newLandmarks[0] are the wrists
@@ -1434,9 +1550,6 @@ function createBodyAnimationFromWorldLandmarks( worldLandmarksArray, skeleton ){
 
     // return new THREE.AnimationClip( "animation", -1, tracks );
 }
-const ARROW_BODY = new THREE.CylinderGeometry( 1, 1, 1, 12 )
-													.rotateX( Math.PI/2)
-													.translate( 0, 0, 0.5 );
 
 const ARROW_HEAD = new THREE.ConeGeometry( 1, 1, 12 )
                                         .rotateX( Math.PI/2)
@@ -1445,31 +1558,223 @@ const ARROW_HEAD = new THREE.ConeGeometry( 1, 1, 12 )
 
 function customArrow( fx, fy, fz, ix, iy, iz, thickness, color)
 {
-    var material = new THREE.MeshLambertMaterial( {color: color} );
+    const material = new THREE.MeshLambertMaterial( {color: color} );
     
-    var length = Math.sqrt( (ix-fx)**2 + (iy-fy)**2 + (iz-fz)**2 );
+    const length = Math.sqrt( (ix-fx)**2 + (iy-fy)**2 + (iz-fz)**2 );
     
-    var body = new THREE.Mesh( ARROW_BODY, material );
-    
-    var head = new THREE.Mesh( ARROW_HEAD, material );
+    const head = new THREE.Mesh( ARROW_HEAD, material );
     head.position.set( 0, 0, length );
     if(length < 0.01) {
         head.scale.set( 0, 0, 0 );
-        body.scale.set( thickness, thickness, length );
     }
     else {
-        head.scale.set( 4*thickness, 4*thickness, 8*thickness );
-        body.scale.set( thickness, thickness, length-8*thickness );
+        head.scale.set( 2*thickness, 2*thickness, 8*thickness );
     }
     
-    var arrow = new THREE.Group( );
-        arrow.position.set( ix, iy, iz );
-        arrow.lookAt( fx, fy, fz );	
-        arrow.add( body, head );
+    const arrow = new THREE.Group( );
+    arrow.position.set( ix, iy, iz );
+    arrow.lookAt( fx, fy, fz );	
+    arrow.add( head );
     
     return arrow;
 }
 
+const fragmentShader = 
+	/* glsl */`
+		uniform vec3 diffuse;
+		uniform float opacity;
+		uniform float linewidth;
+
+		#ifdef USE_DASH
+
+			uniform float dashOffset;
+			uniform float dashSize;
+			uniform float gapSize;
+
+		#endif
+
+		varying float vLineDistance;
+
+		#ifdef WORLD_UNITS
+
+			varying vec4 worldPos;
+			varying vec3 worldStart;
+			varying vec3 worldEnd;
+
+			#ifdef USE_DASH
+
+				varying vec2 vUv;
+
+			#endif
+
+		#else
+
+			varying vec2 vUv;
+
+		#endif
+
+		#include <common>
+		#include <color_pars_fragment>
+		#include <fog_pars_fragment>
+		#include <logdepthbuf_pars_fragment>
+		#include <clipping_planes_pars_fragment>
+
+		vec2 closestLineToLine(vec3 p1, vec3 p2, vec3 p3, vec3 p4) {
+
+			float mua;
+			float mub;
+
+			vec3 p13 = p1 - p3;
+			vec3 p43 = p4 - p3;
+
+			vec3 p21 = p2 - p1;
+
+			float d1343 = dot( p13, p43 );
+			float d4321 = dot( p43, p21 );
+			float d1321 = dot( p13, p21 );
+			float d4343 = dot( p43, p43 );
+			float d2121 = dot( p21, p21 );
+
+			float denom = d2121 * d4343 - d4321 * d4321;
+
+			float numer = d1343 * d4321 - d1321 * d4343;
+
+			mua = numer / denom;
+			mua = clamp( mua, 0.0, 1.0 );
+			mub = ( d1343 + d4321 * ( mua ) ) / d4343;
+			mub = clamp( mub, 0.0, 1.0 );
+
+			return vec2( mua, mub );
+
+		}
+
+		void main() {
+
+			float alpha = opacity;
+			vec4 diffuseColor = vec4( diffuse, alpha * diffuse.a );
+
+			#include <clipping_planes_fragment>
+
+			#ifdef USE_DASH
+
+				if ( vUv.y < - 1.0 || vUv.y > 1.0 ) discard; // discard endcaps
+
+				if ( mod( vLineDistance + dashOffset, dashSize + gapSize ) > dashSize ) discard; // todo - FIX
+
+			#endif
+
+			#ifdef WORLD_UNITS
+
+				// Find the closest points on the view ray and the line segment
+				vec3 rayEnd = normalize( worldPos.xyz ) * 1e5;
+				vec3 lineDir = worldEnd - worldStart;
+				vec2 params = closestLineToLine( worldStart, worldEnd, vec3( 0.0, 0.0, 0.0 ), rayEnd );
+
+				vec3 p1 = worldStart + lineDir * params.x;
+				vec3 p2 = rayEnd * params.y;
+				vec3 delta = p1 - p2;
+				float len = length( delta );
+				float norm = len / linewidth;
+
+				#ifndef USE_DASH
+
+					#ifdef USE_ALPHA_TO_COVERAGE
+
+						float dnorm = fwidth( norm );
+						alpha = 1.0 - smoothstep( 0.5 - dnorm, 0.5 + dnorm, norm );
+
+					#else
+
+						if ( norm > 0.5 ) {
+
+							discard;
+
+						}
+
+					#endif
+
+				#endif
+
+			#else
+
+				#ifdef USE_ALPHA_TO_COVERAGE
+
+					// artifacts appear on some hardware if a derivative is taken within a conditional
+					float a = vUv.x;
+					float b = ( vUv.y > 0.0 ) ? vUv.y - 1.0 : vUv.y + 1.0;
+					float len2 = a * a + b * b;
+					float dlen = fwidth( len2 );
+
+					if ( abs( vUv.y ) > 1.0 ) {
+
+						alpha = 1.0 - smoothstep( 1.0 - dlen, 1.0 + dlen, len2 );
+
+					}
+
+				#else
+
+					if ( abs( vUv.y ) > 1.0 ) {
+
+						float a = vUv.x;
+						float b = ( vUv.y > 0.0 ) ? vUv.y - 1.0 : vUv.y + 1.0;
+						float len2 = a * a + b * b;
+
+						if ( len2 > 1.0 ) discard;
+
+					}
+
+				#endif
+
+			#endif
+
+			#include <logdepthbuf_fragment>
+			#include <color_fragment>
+
+			gl_FragColor = vec4( diffuseColor.rgb, alpha );
+
+			#include <tonemapping_fragment>
+			#include <colorspace_fragment>
+			#include <fog_fragment>
+			//#include <premultiplied_alpha_fragment>
+
+		}
+		`;
+
+class MagicLineGeometry extends LineGeometry {
+    constructor( ) {
+		super( );
+	}
+
+    /**
+	 * Sets the given line colors for this geometry. The length must be a multiple of six since
+	 * each line segment is defined by a start end color in the pattern `(rgb rgb)`.
+	 *
+	 * @param {Float32Array|Array<number>} array - The position data to set.
+	 * @return {LineSegmentsGeometry} A reference to this geometry.
+	 */
+	setColors( array ) {
+
+		let colors;
+
+		if ( array instanceof Float32Array ) {
+
+			colors = array;
+
+		} else if ( Array.isArray( array ) ) {
+
+			colors = new Float32Array( array );
+
+		}
+
+		const instanceColorBuffer = new THREE.InstancedInterleavedBuffer( colors, 8, 1 ); // rgba, rgba
+
+		this.setAttribute( 'instanceColorStart', new THREE.InterleavedBufferAttribute( instanceColorBuffer, 4, 0 ) ); // rgba
+		this.setAttribute( 'instanceColorEnd', new THREE.InterleavedBufferAttribute( instanceColorBuffer, 4, 4 ) ); // rgba
+
+		return this;
+
+	}
+}
 const app = new App();
     
 window.global = {app};
