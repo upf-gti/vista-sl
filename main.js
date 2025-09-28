@@ -449,14 +449,20 @@ class App {
                 arrow.name = t;
                 this.trajectories[trajectory].add(arrow);
             }
+            if( !this.trajectoryEnd ) {
+                this.computeTrajectories(animation);
+                return;
+            }
             // Create geometry
             const geometry = new MagicLineGeometry();
             geometry.setPositions(positions);
-            geometry.setColors(colors);
+            geometry.setAttribute( 'color', new THREE.Float32BufferAttribute( colors, 4 ) );
+            // geometry.setColors(colors);
             const material = new LineMaterial({
                 // color: new THREE.Color(`hsl(${i * 60}, 100%, 50%)`), linewidth: 1, // in world units with size attenuation, pixels otherwise
                 // color: this.trakectories[trajectory].color,
                 vertexColors: true,
+                // vertexAlphas: true,
                 dashed: false,
                 alphaToCoverage: false,
                 linewidth: this.trajectories[trajectory].thickness,
@@ -494,7 +500,8 @@ class App {
                         colors[frame*4+3] = Math.max(0,Math.min(1,1 + alpha));
                     }
                     //this.trajectories[trajectory].children[i].geometry.setPositions(positions);
-                    this.trajectories[trajectory].children[i].geometry.setColors(colors);
+                    this.trajectories[trajectory].children[i].geometry.setAttribute( 'color', new THREE.Float32BufferAttribute( colors, 4 ) );
+
                     continue;
                 }
                 const frame = Number(this.trajectories[trajectory].children[i].name);
@@ -893,7 +900,8 @@ class App {
                         colors[frame*4+3] = Math.max(0,Math.min(1,1 + alpha));
                     }
                     //this.trajectories[trajectory].children[i].geometry.setPositions(positions);
-                    this.trajectories[trajectory].children[i].geometry.setColors(colors);
+                    this.trajectories[trajectory].children[i].geometry.setAttribute( 'color', new THREE.Float32BufferAttribute( colors, 4 ) );
+;
                     continue;
                 }
                 const frame = Number(this.trajectories[trajectory].children[i].name);
@@ -1651,7 +1659,7 @@ const fragmentShader =
 		void main() {
 
 			float alpha = opacity;
-			vec4 diffuseColor = vec4( diffuse, alpha * diffuse.a );
+			vec4 diffuseColor = vec4( diffuse, alpha );
 
 			#include <clipping_planes_fragment>
 
@@ -1729,6 +1737,11 @@ const fragmentShader =
 
 			#include <logdepthbuf_fragment>
 			#include <color_fragment>
+
+            #if defined( USE_COLOR_ALPHA )
+                alpha = vColor.a;
+                diffuseColor.rgb = vec3(1,0,0);
+            #endif
 
 			gl_FragColor = vec4( diffuseColor.rgb, alpha );
 
