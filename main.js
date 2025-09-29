@@ -26,7 +26,7 @@ const avatars = {
 
 class App {
     constructor() {
-        
+
         // Mapping data
         this.animationMap = null;
         this.characters = avatars;
@@ -41,7 +41,7 @@ class App {
         this.videoCanvas = null;
         this.sceneCanvas = null;
         this.video = null;
-        
+
         this.referenceColor = '#800080';
         this.detectedColor =  '#383838';
 
@@ -49,14 +49,14 @@ class App {
         this.applyMediapipe = false;
         this.show3DLandmarks = false;
         this.buildAnimation = true;
-        
+
         this.delayedResizeTime = 500; //ms
         this.delayedResizeID = null;
-        
+
         // Data provided
         this.originalLandmarks = null;
         this.originalLandmarks3D = [];
-        
+
         // Mediapipe
         this.handLandmarker = null;
         this.drawingVideoUtils = null;
@@ -69,16 +69,16 @@ class App {
             leftHandPoints: new THREE.Group(),
             rightHandPoints: new THREE.Group()
         }
-        
+
         // Init performs (character )
         this.performs = new Performs();
         this.performs.init({srcReferencePose: 2, trgReferencePose: 2, color: "#0B0B0C", restrictView: false, onReady: () => { this.init() }});
         this.performs.changeMode(Performs.Modes.KEYFRAME);
         this.performs.controls[this.performs.camera].target.set(-0.0018097140234495583, 1.2244433704429296, 0.003067399741162387);
-        
+
         this.camera = this.performs.cameras[this.performs.camera].clone();
 
-       
+
         this.trajectories = {
             "LeftHand": new THREE.Group(),
             "LeftHandThumb4": new THREE.Group(),
@@ -95,7 +95,7 @@ class App {
         }
         this.trajectoryStart = 0;
         this.trajectoryEnd = 100;
-        this.trajectoryWindow = 20;
+        this.trajectoryWindow = 100;
         window.addEventListener( 'resize', this.onWindowResize.bind(this) );
     }
 
@@ -111,6 +111,7 @@ class App {
             this.animationsMap = await response.json();
         }
         for( const t in this.trajectories) {
+            this.trajectories[t].thickness = 6;
             if(t.includes("Thumb")) {
                 this.trajectories[t].color = new THREE.Color("#51A3A3");//"#DBC2CF");
             }
@@ -126,13 +127,15 @@ class App {
             else if(t.includes("Pinky")) {
                 this.trajectories[t].color = new THREE.Color("#C3E991");//"#16262E");
             }
-            this.trajectories[t].thickness = 2;
+            else {
+                this.trajectories[t].thickness = 8;
+            }
             // this.performs.scene.add(this.trajectories[t]);
         }
-        
+
         await this.createGUI();
         this.createMediapipeScene();
-        
+
         this.drawingVideoUtils = new DrawingUtils( this.videoCanvas.getContext("2d") );
         this.drawingCharacterUtils = new DrawingUtils( this.characterCanvas.getContext("2d") );
 
@@ -149,28 +152,28 @@ class App {
         const [videoMenu, sceneMenu] = menubar.split({sizes: ["50%", "auto"]});
         const videoPanel = videoMenu.addPanel( {className: "m-6", width: "calc(100% - 3rem)"});
         const scenePanel = sceneMenu.addPanel( {className: "m-6", width: "calc(100% - 3rem)"});
-        
+
         const refresh = () => {
             // ------------------------------------------------- Video Menu -------------------------------------------------
             videoPanel.clear();
 
             videoPanel.addTitle("Visualize generated animation from video", {style: { background: "none"}});
-    
+
             videoPanel.sameLine();
             const values = Object.keys(this.animationsMap);
             videoPanel.addSelect("SL Video", values, this.selectedVideo, async (signName, event) => {
                 this.selectedVideo = signName;
-                this.loadVideo( signName );           
+                this.loadVideo( signName );
                 try {
                     const response = await fetch( this.animationsMap[signName] );
                     if( response.ok ) {
                         const data = await response.text();
-                    
+
                         this.performs.keyframeApp.loadFiles( [ {name: this.animationsMap[signName], data}] , ( animationName ) => {
                             // Show canvas after animation loaded
                             this.characterCanvas.classList.remove("hidden");
                             this.sceneCanvas.classList.remove("hidden");
-                            
+
                             this.performs.keyframeApp.onChangeAnimation(animationName, true);
                             this.performs.keyframeApp.changePlayState(false);
                             const animation = this.performs.keyframeApp.bindedAnimations[animationName][this.performs.currentCharacter.model.name];
@@ -186,27 +189,27 @@ class App {
                 catch( err ) {
                     this.buildAnimation = true;
                 }
-            }, { filter: true, overflowContainerY: containerArea.root, width: "40%"});           
-            
+            }, { filter: true, overflowContainerY: containerArea.root, width: "40%"});
+
             videoPanel.addNumber("Speed", this.speed, (v) => {
                 this.speed = v;
                 this.video.playbackRate = v;
-                this.performs.currentCharacter.mixer.timeScale = v;
+                
             }, {min: 0, max: 2, step: 0.01, width: "40%" });
-            
+
             videoPanel.addToggle("Loop", this.loop, (v) => {
-                this.loop = v;           
+                this.loop = v;
             });
             videoPanel.endLine();
-    
+
             videoPanel.addColor("Reference 2D landmarks", this.referenceColor, (v) => {
                 this.referenceColor = v;
             },  { nameWidth: "200px", width: "40%" });
-    
-            // ------------------------------------------------- Scene Menu -------------------------------------------------            
+
+            // ------------------------------------------------- Scene Menu -------------------------------------------------
             scenePanel.clear();
             const charactersInfo = [];
-            
+
             for(let character in this.characters) {
                 charactersInfo.push( { value: character, src: this.characters[character][3]} );
             }
@@ -216,15 +219,14 @@ class App {
                     this.performs.changeAvatar( value );
                     const mixer = this.performs.currentCharacter.mixer;
                     mixer.setTime(this.video.currentTime);
-                    this.performs.currentCharacter.mixer.timeScale = this.speed;
                     const animation = this.performs.keyframeApp.bindedAnimations[this.performs.keyframeApp.currentAnimation][this.performs.currentCharacter.model.name];
                     let boneName = null;
-                    
+
                     for(let i = 0; i < animation.mixerBodyAnimation.tracks.length; i++) {
                         const track = animation.mixerBodyAnimation.tracks[i]
                         const trackName = track.name;
                         for(let trajectory in this.trajectories) {
-    
+
                             if(trackName.includes(trajectory+".") || trackName.includes(trajectory.replace("4","EndSite")+".")) {
                                 boneName = trackName.replace(".quaternion", "");
                                 if(boneName) {
@@ -238,29 +240,29 @@ class App {
                     const track = animation.mixerBodyAnimation.tracks[0];
                     this.trajectoryEnd = track.times.length;
                     this.computeTrajectories(animation);
-                    
-                    
-                    $('#loading').fadeOut(); //hide();               
+
+
+                    $('#loading').fadeOut(); //hide();
                 }, (err) => {
                     $('#loading').fadeOut();
                     alert("There was an error loading the character", "Character not loaded");
                 } );
             }, { filter: true, overflowContainerY: containerArea.root, width: "80%"})
-            
+
             scenePanel.addColor("Background", {r: this.performs.scene.background.r, g: this.performs.scene.background.g, b: this.performs.scene.background.b } , (v) => {
                 this.performs.setBackPlaneColour(v);
             },  { nameWidth: "200px", width: "40%" });
-            
+
             scenePanel.sameLine();
             scenePanel.addToggle("Apply Mediapipe", this.applyMediapipe, (v) => {
                 this.applyMediapipe = v;
-              
+
             }, { nameWidth: "200px", width: "40%" })
-     
+
             scenePanel.addColor("Detected 2D landmarks", this.detectedColor, (v) => {
                 this.detectedColor = v;
             },  { nameWidth: "200px", width: "40%" });
-            
+
             scenePanel.endLine();
             const toggle = scenePanel.addToggle("Show 3D Landmarks", this.show3DLandmarks, (v) => {
                 if( !this.applyMediapipe && v) {
@@ -270,7 +272,7 @@ class App {
                 }
                 this.show3DLandmarks = v;
             }, { nameWidth: "200px", width: "40%" })
-    
+
             if(this.selectedVideo) {
                 scenePanel.addButton(null, "Open trajectories dialog", () => {
                     this.showTrajectoriesDialog();
@@ -285,14 +287,14 @@ class App {
         this.video.controls = false;
         leftArea.attach(this.video);
         leftArea.root.style.position = "relative";
-        
+
         // Show mediapipe 2D landmarks in canvas 2D
         this.videoCanvas = document.createElement('canvas');
         this.videoCanvas.style="width:100%;position:absolute;";
         this.videoCanvas.className="hidden";
         this.videoCanvas.style.pointerEvents = "none";
         leftArea.attach(this.videoCanvas);
-        
+
         this.performs.renderer.domElement.style="width:100%;position:absolute;";
         const info = document.createElement('div');
         info.id = "select-video";
@@ -307,15 +309,15 @@ class App {
         this.characterCanvas.style="width:100%;position:absolute;";
         this.characterCanvas.className="hidden";
         this.characterCanvas.style.pointerEvents = "none";
-        
+
         // Show mediapipe 3D landmarks using threejs
         this.sceneCanvas = document.createElement('canvas');
         this.sceneCanvas.style="width:100%;position:absolute;";
         this.sceneCanvas.className="hidden";
         this.sceneCanvas.style.pointerEvents = "none";
-        
+
         // const container = LX.makeContainer(["auto", "auto"], "", `<video id="video" class="hidden" controls style="width:100%;position:absolute;"></video><canvas id="reference-mediapipe-canvas" class="hidden" style="width:100%;position:absolute;"></canvas>`, leftArea);
-        // container.style.position = "relative";        
+        // container.style.position = "relative";
         rightArea.attach(this.performs.renderer.domElement); // three js character
         rightArea.attach(this.characterCanvas); // 2D landmarks drawing
         rightArea.attach(this.sceneCanvas); // three js 3D landmarks
@@ -328,25 +330,23 @@ class App {
         }
         this.videoEditor.onChangeStart = (t) => {
             const action = this.performs.currentCharacter.mixer._actions[0];
-            const clip = action.getClip();
-            const frame = Math.round(t / clip.duration * clip.tracks[0].times.length);
+            const frame = getFrameIndex(action, t);
             this.trajectoryStart = frame;
 
-            this.showTrajectories( this.trajectoryStart, this.trajectoryEnd);
+            this.updateTrajectories( );
         }
         this.videoEditor.onChangeEnd = (t) => {
             const action = this.performs.currentCharacter.mixer._actions[0];
-            const clip = action.getClip();
-            const frame = Math.round(t / clip.duration * clip.tracks[0].times.length);
+            const frame = getFrameIndex(action, t);
             this.trajectoryEnd = frame;
 
-            this.showTrajectories( this.trajectoryStart, this.trajectoryEnd);
+            this.updateTrajectories( );
         }
     }
 
     computeTrajectories( animation ) {
         let boneName = null;
-        
+
         for(let i = 0; i < animation.mixerBodyAnimation.tracks.length; i++) {
             const track = animation.mixerBodyAnimation.tracks[i]
             const trackName = track.name;
@@ -410,42 +410,44 @@ class App {
                     const rootWorldInverse = new THREE.Matrix4().copy(rootWorldMatrix).invert();
 
                     const localMatrix = new THREE.Matrix4().multiplyMatrices(rootWorldInverse, tipWorldMatrix);
-                    localPosition = new THREE.Vector3().setFromMatrixPosition(localMatrix);         
+                    localPosition = new THREE.Vector3().setFromMatrixPosition(localMatrix);
                 }
                 else { // For hand trajectory : Get global position of the wrist
                     bone.getWorldPosition(localPosition);
                 }
-                
+
                 // Second frame
                 mixer.setTime(track.times[t+1]);
                 this.performs.currentCharacter.model.updateMatrixWorld(true);
-                
+
                 const bone2 = this.performs.currentCharacter.model.getObjectByName(boneName);
                 let localPosition2 = new THREE.Vector3();
-                
+
                 let rootWorldMatrix2 = new THREE.Matrix4().identity();
-                if(!isHand) { // For fingers trajectories: Get fingertip position relative to the first joint of the finger    
+                if(!isHand) { // For fingers trajectories: Get fingertip position relative to the first joint of the finger
                     const root2 = findFirstFingerJoint(bone2);
                     if (!bone2 || !root2) continue;
-                    
+
                     const tipWorldMatrix2 = bone2.matrixWorld.clone();
                     rootWorldMatrix2 = root2.matrixWorld.clone();
                     const rootWorldInverse2 = new THREE.Matrix4().copy(rootWorldMatrix2).invert();
-                    
+
                     const localMatrix2 = new THREE.Matrix4().multiplyMatrices(rootWorldInverse2, tipWorldMatrix2);
                     localPosition2 = new THREE.Vector3().setFromMatrixPosition(localMatrix2);
                 } else { // For hand trajectory : Get global position of the wrist
                     bone2.getWorldPosition(localPosition2);
                 }
-                
+
                 const position = localPosition.clone();
                 const position2 = localPosition2.clone()
-                
+
                 positions.push(position.x, position.y, position.z);
                 const color = this.trajectories[trajectory].color || new THREE.Color(`hsl(${180*Math.sin( track.times[t]/Math.PI)}, 100%, 50%)`);
-                colors.push(color.r, color.g, color.b, 1);
+                colors.push(color.r, color.g, color.b, 0.8);
+                colors.push(color.r, color.g, color.b, 0.8);
+                // colors.push(color.r, color.g, color.b);
 
-                const arrow = customArrow(position2.x, position2.y, position2.z, position.x, position.y, position.z, this.trajectories[trajectory].thickness*0.0005, this.trajectories[trajectory].color || new THREE.Color(`hsl(${180*Math.sin( track.times[t]/Math.PI)}, 100%, 50%)`))
+                const arrow = customArrow(position2.x, position2.y, position2.z, position.x, position.y, position.z, 0.0008, color)
                 arrow.name = t;
                 this.trajectories[trajectory].add(arrow);
             }
@@ -457,15 +459,13 @@ class App {
             const geometry = new MagicLineGeometry();
             geometry.setPositions(positions);
             geometry.setAttribute( 'color', new THREE.Float32BufferAttribute( colors, 4 ) );
-            // geometry.setColors(colors);
+            geometry.setColors(colors);
             const material = new LineMaterial({
-                // color: new THREE.Color(`hsl(${i * 60}, 100%, 50%)`), linewidth: 1, // in world units with size attenuation, pixels otherwise
-                // color: this.trakectories[trajectory].color,
                 vertexColors: true,
-                // vertexAlphas: true,
                 dashed: false,
                 alphaToCoverage: false,
                 linewidth: this.trajectories[trajectory].thickness,
+                vertexShader: vertexShader,
                 fragmentShader: fragmentShader,
                 transparent: true
             });
@@ -479,57 +479,93 @@ class App {
         }
     }
 
-    showTrajectories( startFrame = this.trajectoryStart, endFrame = this.trajectoryEnd) {
-        for(let trajectory in this.trajectories) {
-            let positions = this.trajectories[trajectory].positions;
-            let colors = this.trajectories[trajectory].colors;
-            for(let i = 0; i < this.trajectories[trajectory].children.length; i++) {
-                if(this.trajectories[trajectory].children[i].name == "line") {
-                    //positions = positions.slice(startFrame*3, (endFrame+2)*3);
-                    //colors = colors.slice(startFrame*3, (endFrame+2)*3);
-                    const totalFrames = positions.length/3;
-                    for(let frame = 0; frame < totalFrames; frame++) {
-                        
-                        let alpha = 0;
-                        if(frame < startFrame) {
-                            alpha = (frame - startFrame)/startFrame;   
-                        }
-                        else if(frame > endFrame) {
-                            alpha = (endFrame - frame)/(totalFrames - endFrame);   
-                        }
-                        colors[frame*4+3] = Math.max(0,Math.min(1,1 + alpha));
-                    }
-                    //this.trajectories[trajectory].children[i].geometry.setPositions(positions);
-                    this.trajectories[trajectory].children[i].geometry.setAttribute( 'color', new THREE.Float32BufferAttribute( colors, 4 ) );
+    updateTrajectories() {
+        const mixer = this.performs.currentCharacter.mixer;
+        const action = mixer._actions[0];
+        // Get current frame index
+        const currentFrame = getFrameIndex(action);
 
-                    continue;
+        // Number of frames before and after the current time given a window
+        const offset = Math.ceil(this.trajectoryWindow/2);
+        const startFrame = Math.max(this.trajectoryStart, currentFrame - offset); // First frame inside the window
+        const endFrame = Math.min(currentFrame + offset, this.trajectoryEnd); // Last frame inside the window
+
+        // Update material alpha for each trajectory (line and arrows)
+        for(let trajectory in this.trajectories) {
+            const positions = this.trajectories[trajectory].positions;
+            let colors = this.trajectories[trajectory].colors;
+
+            const line = this.trajectories[trajectory].getObjectByName("line");
+            const totalFrames = positions.length/3;
+            for(let frame = 0; frame < totalFrames; frame++) {
+                const arrow = this.trajectories[trajectory].getObjectByName(frame);
+                let alpha = 0;
+                if(frame < startFrame) {
+                    alpha = (frame - startFrame)/offset;
                 }
-                const frame = Number(this.trajectories[trajectory].children[i].name);
-                if(frame < startFrame  || frame > endFrame) {
-                    this.trajectories[trajectory].children[i].visible = false;
+                else if(frame > endFrame) {
+                    alpha = (endFrame - frame)/offset;
                 }
-                else {
-                    this.trajectories[trajectory].children[i].visible = true;
-                }
+                const opacity = Math.max(0,Math.min(1,0.8 + alpha));
+                colors[frame*8+3] = opacity;
+                colors[frame*8+7] = opacity;
+                arrow.children[0].material.opacity = opacity;
             }
+            line.geometry.setColors(colors);
         }
+
+        // for(let trajectory in this.trajectories) {
+        //     let positions = this.trajectories[trajectory].positions;
+        //     let colors = this.trajectories[trajectory].colors;
+        //     for(let i = 0; i < this.trajectories[trajectory].children.length; i++) {
+        //         if(this.trajectories[trajectory].children[i].name == "line") {
+        //             //positions = positions.slice(startFrame*3, (endFrame+2)*3);
+        //             //colors = colors.slice(startFrame*3, (endFrame+2)*3);
+        //             const totalFrames = positions.length/3;
+        //             for(let frame = 0; frame < totalFrames; frame++) {
+
+        //                 let alpha = 0;
+        //                 if(frame < startFrame) {
+        //                     alpha = -1; //(frame - startFrame)/startFrame;
+        //                 }
+        //                 else if(frame > endFrame) {
+        //                     alpha = -1;//(endFrame - frame)/(totalFrames - endFrame);
+        //                 }
+        //                 colors[frame*8+3] = Math.max(0,Math.min(1,1 + alpha));
+        //                 colors[frame*8+7] = Math.max(0,Math.min(1,1 + alpha));
+        //             }
+        //             //this.trajectories[trajectory].children[i].geometry.setPositions(positions);
+        //             this.trajectories[trajectory].children[i].geometry.setColors(colors);
+        //             //this.trajectories[trajectory].children[i].geometry.setAttribute( 'color', new THREE.Float32BufferAttribute( colors, 4 ) );
+
+        //             continue;
+        //         }
+        //         const frame = Number(this.trajectories[trajectory].children[i].name);
+        //         if(frame < startFrame  || frame > endFrame) {
+        //             this.trajectories[trajectory].children[i].visible = false;
+        //         }
+        //         else {
+        //             this.trajectories[trajectory].children[i].visible = true;
+        //         }
+        //     }
+        // }
     }
 
     showTrajectoriesDialog() {
-    
+
         const dialog = new LX.Dialog("Trajectories", (p) => {
             let leftValue = true;
             let rightValue = true;
-            
-            p.addRange("Trim (frames to show)", [this.trajectoryStart, this.trajectoryEnd], (v) => {
-                this.trajectoryStart = v[0];
-                this.trajectoryEnd = v[1];
-                this.showTrajectories( this.trajectoryStart, this.trajectoryEnd);
-            }, {min: 0, max: this.trajectories["LeftHand"].children.length, step: 1});
+
+            // p.addRange("Trim (frames to show)", [this.trajectoryStart, this.trajectoryEnd], (v) => {
+            //     this.trajectoryStart = v[0];
+            //     this.trajectoryEnd = v[1];
+            //     this.updateTrajectories( this.trajectoryStart, this.trajectoryEnd);
+            // }, {min: 0, max: this.trajectories["LeftHand"].children.length, step: 1});
 
             p.addNumber("Window", this.trajectoryWindow, (v) => {
                 this.trajectoryWindow = v;
-            }, {min: 0, max: Math.ceil((this.trajectories["LeftHand"].children.length - 1)/2), step: 1});
+            }, {min: 0, max: Math.ceil(this.trajectories["LeftHand"].children.length - 1), step: 1});
 
             const leftTrajectories = {};
             const rightTrajectories = {};
@@ -546,7 +582,7 @@ class App {
             const refreshLeft = () => {
                 leftHand.clear();
                 leftHand.branch("Left Hand");
-                leftHand.addToggle(`Show all`, leftValue, (v) => { 
+                leftHand.addToggle(`Show all`, leftValue, (v) => {
                     for(let trajectory in leftTrajectories) {
                         this.trajectories[trajectory].visible = v;
                     }
@@ -566,12 +602,12 @@ class App {
                 }
             }
             refreshLeft();
-            
+
             const rightHand = new LX.Panel();
             const refreshRight = () => {
                 rightHand.clear();
                 rightHand.branch("Right Hand");
-                rightHand.addToggle(`Show all`, rightValue, (v) => { 
+                rightHand.addToggle(`Show all`, rightValue, (v) => {
                     for(let trajectory in rightTrajectories) {
                         this.trajectories[trajectory].visible = v;
                     }
@@ -583,7 +619,7 @@ class App {
                     rightHand.sameLine(2);
                     const t = rightHand.addToggle(`Show ${trajectory}`, this.trajectories[trajectory].visible, (v) => { this.trajectories[trajectory].visible = v;}, {nameWidth: "170px"})
                     t.root.getElementsByTagName("input")[0].style.backgroundColor = this.trajectories[trajectory].color ? this.trajectories[trajectory].color.getHexString() : null;
-                
+
                     rightHand.addNumber("Width", this.trajectories[trajectory].thickness, (v) => {
                         this.trajectories[trajectory].thickness = v;
                         this.trajectories[trajectory].getObjectByName("line").material.linewidth = v;
@@ -595,26 +631,26 @@ class App {
             area.attach(leftHand);
             area.attach(rightHand);
             p.attach(area);
-            
+
         }, {size:["50%", "auto"], draggable: true, })
     }
 
     async loadVideo( signName ) {
-        
-        const landmarksDataUrl = 'https://catsl.eelvex.net/static/vid_data/teacher-' + signName + '/teacher-' + signName + '_keyframe_1.json';        
+
+        const landmarksDataUrl = 'https://catsl.eelvex.net/static/vid_data/teacher-' + signName + '/teacher-' + signName + '_keyframe_1.json';
         this.video.src = `https://catsl.eelvex.net/static/vid/teacher-${signName}.mp4`;
         const canvasCtx = this.characterCanvas.getContext('2d');
         canvasCtx.clearRect(0, 0, this.characterCanvas.width, this.characterCanvas.height);
 
-        this.video.onloadeddata = async (e) => { 
-        
+        this.video.onloadeddata = async (e) => {
+
             this.videoCanvas.width =  this.video.videoWidth;
             this.videoCanvas.height = this.video.videoHeight;
             this.video.currentTime = 0.0;
-            
+
             this.videoCanvas.classList.remove("hidden");
             this.video.classList.remove("hidden");
-            
+
             // Hide info
             document.getElementById("select-video").classList.add("hidden");
             this.originalLandmarks = null;
@@ -642,7 +678,7 @@ class App {
                             landmark3D.unproject(this.camera)
                             this.originalLandmarks3D.push(landmark3D);
                         }
-                    
+
                     }
                 }
                 else {
@@ -667,7 +703,7 @@ class App {
                             // });
                             this.drawingVideoUtils.drawConnectors( landmarks, HandLandmarker.HAND_CONNECTIONS, {color: '#1a2025', lineWidth: 4}); //'#00FF00'
                             this.drawingVideoUtils.drawLandmarks( landmarks, {color: this.referenceColor, fillColor: this.referenceColor, lineWidth: 2}); //'#00FF00'
-                        
+
                         }
                     }
                     else {
@@ -681,24 +717,28 @@ class App {
             }
             this.videoEditor.showControls();
             this.videoEditor._loadVideo({controls: true});
-            requestAnimationFrame(this.animate.bind(this));                             
+            requestAnimationFrame(this.animate.bind(this));
         }
-        
+
         this.video.onplay = (e) => {
             const mixer = this.performs.currentCharacter.mixer;
             this.performs.keyframeApp.changePlayState(!this.video.paused);
+            mixer.timeScale = 1;
             mixer.setTime(this.video.currentTime);
+            mixer.timeScale = this.speed;
         }
 
         this.video.onpause = (e) => {
             const mixer = this.performs.currentCharacter.mixer;
             this.performs.keyframeApp.changePlayState(!this.video.paused);
+            mixer.timeScale = 1;
             mixer.setTime(this.video.currentTime);
         }
 
         this.video.ontimeupdate = (e) => {
             const mixer = this.performs.currentCharacter.mixer;
             if( this.video.paused ) {
+                mixer.timeScale = 1;
                 mixer.setTime(this.video.currentTime);
             }
         }
@@ -718,9 +758,9 @@ class App {
 
         const geometry = new THREE.SphereGeometry( 1, 10, 10 );
         const material = new THREE.MeshBasicMaterial( { color: 0xffff00 } );
-        const sphere = new THREE.Mesh( geometry, material ); 
+        const sphere = new THREE.Mesh( geometry, material );
         sphere.scale.set(0.01, 0.01, 0.01);
-        
+
         for(let i = 0; i < 21; i++) { // mediapipe hand bones
             this.mediapipeScene.leftHandPoints.add( sphere.clone() );
             this.mediapipeScene.rightHandPoints.add( sphere.clone() );
@@ -731,7 +771,7 @@ class App {
         this.mediapipeScene.renderer = new THREE.WebGLRenderer({canvas: this.sceneCanvas, alpha: true});
         this.mediapipeScene.renderer.setSize( window.innerWidth, window.innerHeight );
     }
-    
+
     async initMediapipe () {
         const vision = await FilesetResolver.forVisionTasks( "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm" );
         this.handLandmarker = await HandLandmarker.createFromOptions(vision, {
@@ -773,7 +813,7 @@ class App {
             this.performs.cameras[i].updateProjectionMatrix();
         }
         this.performs.renderer.setSize( width, height );
-        this.mediapipeScene.renderer.setSize( width, height );                    
+        this.mediapipeScene.renderer.setSize( width, height );
 
         this.characterCanvas.width = width;
         this.characterCanvas.height = height;
@@ -782,18 +822,18 @@ class App {
     }
 
     async animate() {
-        
+
         this.mediapipeScene.leftHandPoints.visible = false;
         this.mediapipeScene.rightHandPoints.visible = false;
-        
-        const canvasCtx = this.characterCanvas.getContext('2d'); 
+
+        const canvasCtx = this.characterCanvas.getContext('2d');
         canvasCtx.clearRect(0, 0, this.characterCanvas.width, this.characterCanvas.height);
 
         if( this.applyMediapipe ) {
 
             // Convert 3D canvas ( three scene ) into image to send it to Mediapipe
             const bitmap = await createImageBitmap(this.performs.renderer.domElement);
-                       
+
             const detectionsHand = this.handLandmarker.detect(bitmap);
             bitmap.close();
             if (detectionsHand.landmarks.length) {
@@ -812,10 +852,10 @@ class App {
                             detectedLandmarks[i].y = smoothingFactor * detectedLandmarks[i].y + (1 - smoothingFactor) * this.prevLandmarks[i].y;
                         }
                     }
-                    
+
                     let color = this.detectedColor;
                     if(index == detectionsHand.handedness[j][0].index) {
-                        
+
                         let transformed = transformLandmarks(flipLandmarks(originalLandmarks), detectedLandmarks);
                         const score = scoreLandmarks(transformed, detectedLandmarks);
                         color = scoreToColor(score);
@@ -838,92 +878,76 @@ class App {
                         else {
                             hand3D = this.performs.scene.getObjectByName(`mixamorig_RightHand`) || this.performs.scene.getObjectByName(`RightHand`);
                         }
-                        
+
                         let pos = new THREE.Vector3();
                         if(hand3D) {
-                            hand3D.getWorldPosition(pos);                 
+                            hand3D.getWorldPosition(pos);
                         }
-                        
-                        const detectedLandmarks = detectionsHand.worldLandmarks[j];                         
+
+                        const detectedLandmarks = detectionsHand.worldLandmarks[j];
                         for (let i = 0; i < detectedLandmarks.length; i++) {
                             if(hand == "Left") {
                                 this.mediapipeScene.leftHandPoints.visible = true;
                                 this.mediapipeScene.leftHandPoints.children[i].position.x = pos.x +(detectedLandmarks[i].x - detectedLandmarks[0].x);
                                 this.mediapipeScene.leftHandPoints.children[i].position.y = pos.y -(detectedLandmarks[i].y - detectedLandmarks[0].y);
-                                this.mediapipeScene.leftHandPoints.children[i].position.z = pos.z -(detectedLandmarks[i].z - detectedLandmarks[0].z);                       
+                                this.mediapipeScene.leftHandPoints.children[i].position.z = pos.z -(detectedLandmarks[i].z - detectedLandmarks[0].z);
                             }
                             else {
                                 this.mediapipeScene.rightHandPoints.visible = true;
                                 this.mediapipeScene.rightHandPoints.children[i].position.x = pos.x +(detectedLandmarks[i].x - detectedLandmarks[0].x);
                                 this.mediapipeScene.rightHandPoints.children[i].position.y = pos.y -(detectedLandmarks[i].y - detectedLandmarks[0].y);
-                                this.mediapipeScene.rightHandPoints.children[i].position.z = pos.z -(detectedLandmarks[i].z - detectedLandmarks[0].z);                        
+                                this.mediapipeScene.rightHandPoints.children[i].position.z = pos.z -(detectedLandmarks[i].z - detectedLandmarks[0].z);
                             }
                         }
-                    }                        
+                    }
                 }
             }
-    
+
             this.mediapipeScene.renderer.render(this.mediapipeScene.scene, this.performs.cameras[this.performs.camera]);
         }
- 
-        for(let trajectory in this.trajectories) {
 
-            if(trajectory != "LeftHand" && trajectory != "RightHand") {
-              // this.performs.currentCharacter.model.getObjectByName(this.trajectories[trajectory].name.includes("LeftHand") ? this.trajectories["LeftHand"].name : this.trajectories["RightHand"].name).getWorldPosition(this.trajectories[trajectory].position);
-                // this.performs.currentCharacter.model.getObjectByName(this.trajectories[trajectory].name).getWorldPosition(this.trajectories[trajectory].position);
-            }          
-        }
-        const mixer = this.performs.currentCharacter.mixer;
-        const action = mixer._actions[0];
-        const frame = getFrameIndex(action);
+        this.updateTrajectories();
 
-        const startFrame = Math.max(0,frame - Math.ceil(this.trajectoryWindow/2));
-        const endFrame = frame + Math.ceil(this.trajectoryWindow/2);
-        for(let trajectory in this.trajectories) {
-            let positions = this.trajectories[trajectory].positions;
-            let colors = this.trajectories[trajectory].colors;
-            for(let i = 0; i < this.trajectories[trajectory].children.length; i++) {
-                if(this.trajectories[trajectory].children[i].name == "line") {
-                    // positions = positions.slice(startFrame*3, (endFrame+2)*3);
-                    // colors = colors.slice(startFrame*3, (endFrame+2)*3);
-                    // this.trajectories[trajectory].children[i].geometry.setPositions(positions);
-                    const totalFrames = positions.length/3;
-                    for(let frame = 0; frame < totalFrames; frame++) {
-                        
-                        let alpha = 0;
-                        if(frame < startFrame) {
-                            alpha = (frame - startFrame)/startFrame;   
-                        }
-                        else if(frame > endFrame) {
-                            alpha = (endFrame - frame)/(totalFrames - endFrame);   
-                        }
-                        colors[frame*4+3] = Math.max(0,Math.min(1,1 + alpha));
-                    }
-                    //this.trajectories[trajectory].children[i].geometry.setPositions(positions);
-                    this.trajectories[trajectory].children[i].geometry.setAttribute( 'color', new THREE.Float32BufferAttribute( colors, 4 ) );
-;
-                    continue;
-                }
-                const frame = Number(this.trajectories[trajectory].children[i].name);
-                if(frame < startFrame  || frame > endFrame) {
-                    this.trajectories[trajectory].children[i].visible = false;
-                }
-                else {
-                    this.trajectories[trajectory].children[i].visible = true;
-                }
-            }
-        }
-      
         requestAnimationFrame(this.animate.bind(this));
     }
 }
 
-const getFrameIndex = (action, ) => {
-    const animationTime = action.time;
+const getFrameIndex = ( action, time = action.time, mode = 0 ) => {
+
+    if(!action)
+        return -1;
+
+    const animationTime = time;
     const times = action._clip.tracks[0].times;
-    const frameCount = Math.round( 1 / (times[4] - times[3]) );
-    return Math.round(animationTime / action.getClip().duration * frameCount)
+
+    //binary search
+    let min = 0, max = times.length - 1;
+    
+    // edge cases
+    if ( times[min] > animationTime ){
+        return mode == -1 ? -1 : 0;
+    }
+    if ( times[max] < animationTime ){
+        return mode == 1 ? -1 : max;
+    }
+    
+    // time is between first and last frame
+    let half = Math.floor( ( min + max ) / 2 );
+    while ( min < half && half < max ){
+        if ( animationTime < times[half] ){ max = half; }
+        else{ min = half; }
+        half = Math.floor( ( min + max ) / 2 );
+    }
+
+    if (mode == 0 ){
+        return Math.abs( animationTime - times[min] ) < Math.abs( animationTime - times[max] ) ? min : max;
+    }
+    else if ( mode == -1 ){
+        return times[max] == animationTime ? max : min;
+    }
+    return times[min] == animationTime ? min : max;
 }
+
 const transformLandmarks = (originalLandmarks, newLandmarks) => {
     // Assume originalLandmarks and newLandmarks are arrays of landmarks
     // and originalLandmarks[0] and newLandmarks[0] are the wrists
@@ -1054,7 +1078,7 @@ function scoreLandmarks(landmarks1, landmarks2) {
 	const distance = Math.sqrt(dx * dx + dy * dy);
 
 	// Calculate the weight for this landmark, decreasing outwords from the wrist (0):
-	// 0 - 1 - 2 - 3 - 4 
+	// 0 - 1 - 2 - 3 - 4
 	// 0 - 5 - 6 - 7 - 8
 	// 0 - 9 - 10 - 11 - 12
 	// 0 - 13 - 14 - 15 - 16
@@ -1092,7 +1116,7 @@ function scoreLandmarks(landmarks1, landmarks2) {
 	    // console.log("Direction penalty: " + directionPenalty);
 	    score += directionPenalty * weight;
 	}
-	
+
     }
 
     return score;
@@ -1141,8 +1165,8 @@ function createBodyAnimationFromWorldLandmarks( worldLandmarksArray, skeleton ){
         const landmarkShoulderRight = bodyLandmarks[ 12 ];
         const landmarkHipsMid = new THREE.Vector3(0,0,0);
         const landmarkShoulderMid = new THREE.Vector3(0,0,0);
-        let dirHipsPred = ( new THREE.Vector3() ).subVectors( landmarkHipsRight, landmarkHipsLeft ); 
-        let dirShoulderPred = ( new THREE.Vector3() ).subVectors( landmarkShoulderRight, landmarkShoulderLeft ); 
+        let dirHipsPred = ( new THREE.Vector3() ).subVectors( landmarkHipsRight, landmarkHipsLeft );
+        let dirShoulderPred = ( new THREE.Vector3() ).subVectors( landmarkShoulderRight, landmarkShoulderLeft );
         landmarkHipsMid.addScaledVector( dirHipsPred, 0.5).add( landmarkHipsLeft );
         landmarkShoulderMid.addScaledVector( dirShoulderPred, 0.5).add( landmarkShoulderLeft );
         let dirSpinePred = ( new THREE.Vector3() ).subVectors( landmarkShoulderMid, landmarkHipsMid ).normalize();
@@ -1152,7 +1176,7 @@ function createBodyAnimationFromWorldLandmarks( worldLandmarksArray, skeleton ){
         const invWorldQuat = new THREE.Quaternion();
         const qq = new THREE.Quaternion();
         const tempQuat = new THREE.Quaternion();
-        
+
         // hips
         boneHips.matrixWorld.decompose( _ignoreVec3, invWorldQuat, _ignoreVec3 );
         invWorldQuat.invert();
@@ -1180,7 +1204,7 @@ function createBodyAnimationFromWorldLandmarks( worldLandmarksArray, skeleton ){
         qq.normalize();
         boneHips.quaternion.multiply(qq);
 
-        // move qq from left_spine0_Quat to right_spine_Quat.  
+        // move qq from left_spine0_Quat to right_spine_Quat.
         // Q = (hips * qq) * spine0Quat = hips * (qq * spine0Quat) = hips * spine0Quat * qq'
         qq.multiply( boneSpine0.quaternion ).premultiply( tempQuat.copy( boneSpine0.quaternion ).invert() );
         boneSpine0.quaternion.multiply( qq );
@@ -1221,17 +1245,17 @@ function createBodyAnimationFromWorldLandmarks( worldLandmarksArray, skeleton ){
         let earNoseDirPred = (new THREE.Vector3()).subVectors( bodyLandmarks[0], bodyLandmarks[7] ).normalize();
         let upHeadDirPred = (new THREE.Vector3()).crossVectors( earsDirPred, earNoseDirPred ).normalize(); // will change to local
         let forwardHeadDirPred = (new THREE.Vector3()).crossVectors( upHeadDirPred, earsDirPred ).normalize();
-        
+
         boneHead.matrixWorld.decompose( tempVec3, qq, tempVec3 );
         qq.invert(); // invWorldQuat
         upHeadDirPred.applyQuaternion( qq ).normalize(); // local space
-    
+
         // move head to predicted direction (SWING)
         qq.setFromUnitVectors( headBoneDir, upHeadDirPred );
         boneHead.quaternion.multiply( qq )
         getTwistQuaternion( qq, headBoneDir, qq ); // unwanted twist from the swing operation
         boneHead.quaternion.multiply( qq.invert() ).normalize(); // remove twist
-        
+
         // compute head roll (TWIST)
         tempVec3.set(-1,0,0); // because of mediapipe points
         let angle = Math.acos( forwardHeadDirPred.dot( tempVec3 ) ); // computing in world space
@@ -1296,11 +1320,11 @@ function createBodyAnimationFromWorldLandmarks( worldLandmarksArray, skeleton ){
         boneHand.matrixWorld.decompose( _ignoreVec3, invWorldQuat, _ignoreVec3 ); // get L to W quat
         invWorldQuat.invert(); // W to L
 
-        // metacarpian middle finger 
-        let mcMidPred = new THREE.Vector3(); 
+        // metacarpian middle finger
+        let mcMidPred = new THREE.Vector3();
         mcMidPred.subVectors( handLandmarks[9], handLandmarks[0] ); // world
         mcMidPred.applyQuaternion( invWorldQuat ).normalize(); // hand local space
-        
+
         //swing (with unwanted twist)
         let dirBone = boneMid.position.clone().normalize();
         let qq = new THREE.Quaternion();
@@ -1319,15 +1343,15 @@ function createBodyAnimationFromWorldLandmarks( worldLandmarksArray, skeleton ){
     }
 
     /* TODO
-        Consider moving the constraints direclty into the mediapipe landmarks. 
+        Consider moving the constraints direclty into the mediapipe landmarks.
         This would avoid unnecessary recomputations of constraints between different characters.
         Changes would be baked already in the mediapipe landmarks
-    */       
+    */
     function computeQuatPhalange( skeleton, bindQuats, handLandmarks, isLeft = false ){
         if ( !handLandmarks ){ return; }
         //handlandmarks is an array of {x,y,z,visiblity} (mediapipe)
 
-        const bonePhalanges = isLeft ? 
+        const bonePhalanges = isLeft ?
         [ 13,14,15,16,    17,18,19,20,    21,22,23,24,    25,26,27,28,    29,30,31,32 ] :
         [ 53,54,55,56,    49,50,51,52,    45,46,47,48,    41,42,43,44,    37,38,39,40 ];
 
@@ -1365,7 +1389,7 @@ function createBodyAnimationFromWorldLandmarks( worldLandmarksArray, skeleton ){
             meanSideDeviation += handSide.dot(tempVec3_1) * 1/3;
             tempVec3_1.subVectors(handLandmarks[f+3], handLandmarks[f+2]).normalize();
             meanSideDeviation += handSide.dot(tempVec3_1) * 1/3;
-            
+
             if (Math.abs(meanSideDeviation) > maxLateralDeviation){
                 meanSideDeviation = (meanSideDeviation < 0) ? -maxLateralDeviation : maxLateralDeviation;
             }
@@ -1386,7 +1410,7 @@ function createBodyAnimationFromWorldLandmarks( worldLandmarksArray, skeleton ){
                 const landmark = f + i;
                 boneSrc.quaternion.copy( bindQuats[ bonePhalanges[ f+i-1 ] ] );
                 boneSrc.updateWorldMatrix( true, false );
-            
+
                 // world mediapipe phalange direction
                 let v_phalange = new THREE.Vector3();
                 v_phalange.subVectors( handLandmarks[landmark+1], handLandmarks[landmark] ).normalize();
@@ -1404,7 +1428,7 @@ function createBodyAnimationFromWorldLandmarks( worldLandmarksArray, skeleton ){
                     // prevForward and prevNormal do not have any lateral deviation
                     const dotForward = v_phalange.dot(prevForward);
                     const dotNormal = v_phalange.dot(prevNormal);
-                    
+
                     // finger cannot bend uppwards
                     if (dotNormal > 0){
                         v_phalange.copy( prevForward );
@@ -1412,19 +1436,19 @@ function createBodyAnimationFromWorldLandmarks( worldLandmarksArray, skeleton ){
                         const limitForward = -0.76; // cos 40º
                         const limitNormal = -0.64; // sin 40º
                         // too much bending, restrict it (set default bended direction)
-                        if ( dotForward < limitForward ){ 
+                        if ( dotForward < limitForward ){
                             v_phalange.set(0,0,0);
                             v_phalange.addScaledVector( prevForward, limitForward);
                             v_phalange.addScaledVector( prevNormal, limitNormal);
                         }
                     }
-    
+
                     v_phalange.normalize();
-            
+
                     prevNormal.crossVectors( v_phalange, handSide ).normalize();
                     prevForward.copy(v_phalange); // without any lateral deviation
 
-                    // store lateral deviation rotation axis. As the finger could be bent, the fingerNormal and handNormal do not necessarily match. 
+                    // store lateral deviation rotation axis. As the finger could be bent, the fingerNormal and handNormal do not necessarily match.
                     if ( i == 0 ){
                         latDevNormal.copy( prevNormal );
                     }
@@ -1444,27 +1468,27 @@ function createBodyAnimationFromWorldLandmarks( worldLandmarksArray, skeleton ){
                         prevSide.copy(handNormal); // swap
                         prevNormal.copy(handSide); // swap
                         if ( isLeft ){
-                            prevNormal.multiplyScalar(-1);                            
+                            prevNormal.multiplyScalar(-1);
                         }
                     }
                     else{
                         // other thumb bones
                         // remove lateral deviation
                         v_phalange.addScaledVector(prevSide, -v_phalange.dot(prevSide));
-                        
+
                         // cannot bend on that direction
                         const dotNormal = v_phalange.dot(prevNormal);
                         if (dotNormal > 0){
                             v_phalange.addScaledVector(prevNormal, -dotNormal)
-                        }        
+                        }
                     }
 
                     v_phalange.normalize();
-    
+
                     if (v_phalange.length() < 0.0001 ){
                         v_phalange.copy(prevForward);
                     }
-    
+
                     // update previous directions with the current ones
                     if ( isLeft ){
                         prevNormal.crossVectors( v_phalange, prevSide ).normalize();
@@ -1482,10 +1506,10 @@ function createBodyAnimationFromWorldLandmarks( worldLandmarksArray, skeleton ){
                 invWorldQuat.invert();
                 // world phalange direction to local space
                 v_phalange.applyQuaternion( invWorldQuat ).normalize();
-    
+
                 // character bone local space direction
                 let phalange_p = boneTrg.position.clone().normalize();
-    
+
                 // move bone to predicted direction
                 const rot = new THREE.Quaternion();
                 const twist = new THREE.Quaternion();
@@ -1529,15 +1553,15 @@ function createBodyAnimationFromWorldLandmarks( worldLandmarksArray, skeleton ){
 
         // right arm-hands
         computeQuatArm( skeleton, body, false );
-        computeQuatHand( skeleton, rightHand, false); 
+        computeQuatHand( skeleton, rightHand, false);
         computeQuatPhalange( skeleton, bindQuats, rightHand, false );
-        
+
         // left arm-hands
         computeQuatArm( skeleton, body, true );
-        computeQuatHand( skeleton, leftHand, true ); 
+        computeQuatHand( skeleton, leftHand, true );
         computeQuatPhalange( skeleton, bindQuats, leftHand, true );
 
-        // remove hips delta rotation from legs (children of hips). Hardcoded for EVA 
+        // remove hips delta rotation from legs (children of hips). Hardcoded for EVA
         skeleton.bones[62].quaternion.copy( skeleton.bones[0].quaternion ).invert().multiply( bindQuats[0] ).multiply( bindQuats[62] );
         skeleton.bones[57].quaternion.copy( skeleton.bones[0].quaternion ).invert().multiply( bindQuats[0] ).multiply( bindQuats[57] );
 
@@ -1548,7 +1572,7 @@ function createBodyAnimationFromWorldLandmarks( worldLandmarksArray, skeleton ){
 
         // // store timing
         // if (i != 0){ timeAcc += worldLandmarksArray[i].dt/1000; }
-        // times[i] = timeAcc;  
+        // times[i] = timeAcc;
     }
 
     // // for each bone create a quat track
@@ -1566,10 +1590,10 @@ const ARROW_HEAD = new THREE.ConeGeometry( 1, 1, 12 )
 
 function customArrow( fx, fy, fz, ix, iy, iz, thickness, color)
 {
-    const material = new THREE.MeshLambertMaterial( {color: color} );
-    
+    const material = new THREE.MeshLambertMaterial( {color: color, transparent: true} );
+
     const length = Math.sqrt( (ix-fx)**2 + (iy-fy)**2 + (iz-fz)**2 );
-    
+
     const head = new THREE.Mesh( ARROW_HEAD, material );
     head.position.set( 0, 0, length );
     if(length < 0.01) {
@@ -1578,16 +1602,16 @@ function customArrow( fx, fy, fz, ix, iy, iz, thickness, color)
     else {
         head.scale.set( 2*thickness, 2*thickness, 8*thickness );
     }
-    
+
     const arrow = new THREE.Group( );
     arrow.position.set( ix, iy, iz );
-    arrow.lookAt( fx, fy, fz );	
+    arrow.lookAt( fx, fy, fz );
     arrow.add( head );
-    
+
     return arrow;
 }
 
-const fragmentShader = 
+const fragmentShader =
 	/* glsl */`
 		uniform vec3 diffuse;
 		uniform float opacity;
@@ -1659,7 +1683,7 @@ const fragmentShader =
 		void main() {
 
 			float alpha = opacity;
-			vec4 diffuseColor = vec4( diffuse, alpha );
+			vec4 diffuseColor = vec4( vec3(1.0,1.0,1.0), alpha );
 
 			#include <clipping_planes_fragment>
 
@@ -1738,20 +1762,244 @@ const fragmentShader =
 			#include <logdepthbuf_fragment>
 			#include <color_fragment>
 
-            #if defined( USE_COLOR_ALPHA )
+            #ifdef USE_COLOR_ALPHA
                 alpha = vColor.a;
-                diffuseColor.rgb = vec3(1,0,0);
+                //diffuseColor.rgb = vColor.rbg;
             #endif
 
 			gl_FragColor = vec4( diffuseColor.rgb, alpha );
 
-			#include <tonemapping_fragment>
-			#include <colorspace_fragment>
-			#include <fog_fragment>
-			//#include <premultiplied_alpha_fragment>
+			// #include <tonemapping_fragment>
+			// #include <colorspace_fragment>
+			// #include <fog_fragment>
+			// #include <premultiplied_alpha_fragment>
 
 		}
 		`;
+
+const vertexShader =
+	/* glsl */`
+		#include <common>
+		#include <color_pars_vertex>
+		#include <fog_pars_vertex>
+		#include <logdepthbuf_pars_vertex>
+		#include <clipping_planes_pars_vertex>
+
+		uniform float linewidth;
+		uniform vec2 resolution;
+
+		attribute vec3 instanceStart;
+		attribute vec3 instanceEnd;
+
+        #ifdef USE_COLOR_ALPHA
+
+            attribute vec4 instanceColorStart;
+            attribute vec4 instanceColorEnd;
+        #else
+            attribute vec3 instanceColorStart;
+            attribute vec3 instanceColorEnd;
+        #endif
+
+		#ifdef WORLD_UNITS
+
+			varying vec4 worldPos;
+			varying vec3 worldStart;
+			varying vec3 worldEnd;
+
+			#ifdef USE_DASH
+
+				varying vec2 vUv;
+
+			#endif
+
+		#else
+
+			varying vec2 vUv;
+
+		#endif
+
+		#ifdef USE_DASH
+
+			uniform float dashScale;
+			attribute float instanceDistanceStart;
+			attribute float instanceDistanceEnd;
+			varying float vLineDistance;
+
+		#endif
+
+		void trimSegment( const in vec4 start, inout vec4 end ) {
+
+			// trim end segment so it terminates between the camera plane and the near plane
+
+			// conservative estimate of the near plane
+			float a = projectionMatrix[ 2 ][ 2 ]; // 3nd entry in 3th column
+			float b = projectionMatrix[ 3 ][ 2 ]; // 3nd entry in 4th column
+			float nearEstimate = - 0.5 * b / a;
+
+			float alpha = ( nearEstimate - start.z ) / ( end.z - start.z );
+
+			end.xyz = mix( start.xyz, end.xyz, alpha );
+
+		}
+
+		void main() {
+            
+            #ifdef USE_COLOR_ALPHA
+                vColor = ( position.y < 0.5 ) ? instanceColorStart : instanceColorEnd;
+            #endif
+
+			#ifdef USE_COLOR
+
+				vColor.xyz = ( position.y < 0.5 ) ? instanceColorStart.xyz : instanceColorEnd.xyz;
+
+			#endif
+
+			#ifdef USE_DASH
+
+				vLineDistance = ( position.y < 0.5 ) ? dashScale * instanceDistanceStart : dashScale * instanceDistanceEnd;
+				vUv = uv;
+
+			#endif
+
+			float aspect = resolution.x / resolution.y;
+
+			// camera space
+			vec4 start = modelViewMatrix * vec4( instanceStart, 1.0 );
+			vec4 end = modelViewMatrix * vec4( instanceEnd, 1.0 );
+
+			#ifdef WORLD_UNITS
+
+				worldStart = start.xyz;
+				worldEnd = end.xyz;
+
+			#else
+
+				vUv = uv;
+
+			#endif
+
+			// special case for perspective projection, and segments that terminate either in, or behind, the camera plane
+			// clearly the gpu firmware has a way of addressing this issue when projecting into ndc space
+			// but we need to perform ndc-space calculations in the shader, so we must address this issue directly
+			// perhaps there is a more elegant solution -- WestLangley
+
+			bool perspective = ( projectionMatrix[ 2 ][ 3 ] == - 1.0 ); // 4th entry in the 3rd column
+
+			if ( perspective ) {
+
+				if ( start.z < 0.0 && end.z >= 0.0 ) {
+
+					trimSegment( start, end );
+
+				} else if ( end.z < 0.0 && start.z >= 0.0 ) {
+
+					trimSegment( end, start );
+
+				}
+
+			}
+
+			// clip space
+			vec4 clipStart = projectionMatrix * start;
+			vec4 clipEnd = projectionMatrix * end;
+
+			// ndc space
+			vec3 ndcStart = clipStart.xyz / clipStart.w;
+			vec3 ndcEnd = clipEnd.xyz / clipEnd.w;
+
+			// direction
+			vec2 dir = ndcEnd.xy - ndcStart.xy;
+
+			// account for clip-space aspect ratio
+			dir.x *= aspect;
+			dir = normalize( dir );
+
+			#ifdef WORLD_UNITS
+
+				vec3 worldDir = normalize( end.xyz - start.xyz );
+				vec3 tmpFwd = normalize( mix( start.xyz, end.xyz, 0.5 ) );
+				vec3 worldUp = normalize( cross( worldDir, tmpFwd ) );
+				vec3 worldFwd = cross( worldDir, worldUp );
+				worldPos = position.y < 0.5 ? start: end;
+
+				// height offset
+				float hw = linewidth * 0.5;
+				worldPos.xyz += position.x < 0.0 ? hw * worldUp : - hw * worldUp;
+
+				// don't extend the line if we're rendering dashes because we
+				// won't be rendering the endcaps
+				#ifndef USE_DASH
+
+					// cap extension
+					worldPos.xyz += position.y < 0.5 ? - hw * worldDir : hw * worldDir;
+
+					// add width to the box
+					worldPos.xyz += worldFwd * hw;
+
+					// endcaps
+					if ( position.y > 1.0 || position.y < 0.0 ) {
+
+						worldPos.xyz -= worldFwd * 2.0 * hw;
+
+					}
+
+				#endif
+
+				// project the worldpos
+				vec4 clip = projectionMatrix * worldPos;
+
+				// shift the depth of the projected points so the line
+				// segments overlap neatly
+				vec3 clipPose = ( position.y < 0.5 ) ? ndcStart : ndcEnd;
+				clip.z = clipPose.z * clip.w;
+
+			#else
+
+				vec2 offset = vec2( dir.y, - dir.x );
+				// undo aspect ratio adjustment
+				dir.x /= aspect;
+				offset.x /= aspect;
+
+				// sign flip
+				if ( position.x < 0.0 ) offset *= - 1.0;
+
+				// endcaps
+				if ( position.y < 0.0 ) {
+
+					offset += - dir;
+
+				} else if ( position.y > 1.0 ) {
+
+					offset += dir;
+
+				}
+
+				// adjust for linewidth
+				offset *= linewidth;
+
+				// adjust for clip-space to screen-space conversion // maybe resolution should be based on viewport ...
+				offset /= resolution.y;
+
+				// select end
+				vec4 clip = ( position.y < 0.5 ) ? clipStart : clipEnd;
+
+				// back to clip space
+				offset *= clip.w;
+
+				clip.xy += offset;
+
+			#endif
+
+			gl_Position = clip;
+
+			vec4 mvPosition = ( position.y < 0.5 ) ? start : end; // this is an approximation
+
+			#include <logdepthbuf_vertex>
+			#include <clipping_planes_vertex>
+			#include <fog_vertex>
+
+		}
+		`
 
 class MagicLineGeometry extends LineGeometry {
     constructor( ) {
@@ -1759,15 +2007,33 @@ class MagicLineGeometry extends LineGeometry {
 	}
 
     /**
-	 * Sets the given line colors for this geometry. The length must be a multiple of six since
-	 * each line segment is defined by a start end color in the pattern `(rgb rgb)`.
+	 * Sets the given line colors for this geometry. The length must be a multiple of eight since
+	 * each line segment is defined by a start end color in the pattern `(rgba rgba)`.
 	 *
 	 * @param {Float32Array|Array<number>} array - The position data to set.
 	 * @return {LineSegmentsGeometry} A reference to this geometry.
 	 */
 	setColors( array ) {
 
-		let colors;
+        // converts [ r1, g1, b1, a1, r2, g2, b2, a2, ... ] to pairs format
+
+		const length = array.length - 4;
+		let colors = new Float32Array( 2 * length );
+
+		for ( let i = 0; i < length; i += 4 ) {
+
+			colors[ 2 * i ] = array[ i ];
+			colors[ 2 * i + 1 ] = array[ i + 1 ];
+			colors[ 2 * i + 2 ] = array[ i + 2 ];
+			colors[ 2 * i + 3 ] = array[ i + 3 ];
+
+			colors[ 2 * i + 4 ] = array[ i + 4 ];
+			colors[ 2 * i + 5 ] = array[ i + 5 ];
+			colors[ 2 * i + 6 ] = array[ i + 6 ];
+			colors[ 2 * i + 7 ] = array[ i + 7 ];
+
+		}
+		
 
 		if ( array instanceof Float32Array ) {
 
@@ -1789,5 +2055,5 @@ class MagicLineGeometry extends LineGeometry {
 	}
 }
 const app = new App();
-    
+
 window.global = {app};
