@@ -34,7 +34,7 @@ class TimeBar {
   
         this.markerWidth = options.markerWidth ?? 8;
         this.markerHeight = options.markerHeight ?? (this.canvas.height * 0.5);
-        this.offset = options.offset || (this.markerWidth*0.5 + 8);
+        this.offset = options.offset || (this.markerWidth*0.5 + 5);
 
         // dimensions of line (not canvas)
         this.lineWidth = this.canvas.width - this.offset * 2;
@@ -147,7 +147,7 @@ class TimeBar {
         ctx.fillStyle = ctx.strokeStyle = options.fillColor || '#111' // "#FFF";
 
 
-        y -= this.offset + 4;
+        y -= this.offset + 8;
         // Current time ball grab
         ctx.fillStyle = options.fillColor || '#e5e5e5';
         ctx.beginPath();
@@ -614,7 +614,12 @@ class VideoEditor {
             await new Promise(r => setTimeout(r, 1000));
             this.video.currentTime = 10000000 * Math.random();
         }
-        
+        this.video.ondurationchange = (v) => {
+            console.log("duration changed from", this.endTime, " to ", this.video.duration);
+            this.endTime = this.video.duration;
+            const x = this._timeToX(this.endTime);
+            this._setEndValue(x);
+        }
         this.timebar.startX = this.timebar.position.x;
         this.timebar.endX = this.timebar.position.x + this.timebar.lineWidth;
 
@@ -660,7 +665,10 @@ class VideoEditor {
             this.onDraw();
         }
         if(this.playing) {
-            if(this.video.currentTime >= this.endTime) {
+            if(this.video.currentTime >= this.endTime ) {
+                if(!this.video.loop) {
+                    this.playing = false;
+                }
                 this.video.currentTime = this.startTime;
             }
             const x = this._timeToX(this.video.currentTime);

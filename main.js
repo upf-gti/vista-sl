@@ -1,7 +1,7 @@
 import { Performs } from './js/Performs.js'
 import { LX } from 'lexgui'
-import 'lexgui/extensions/videoeditor.js';
-// import '/videoeditor.js'
+// import 'lexgui/extensions/videoeditor.js';
+import '/videoeditor.js'
 import * as THREE from 'three'
 import { DrawingUtils, HandLandmarker, PoseLandmarker, FilesetResolver} from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.13';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
@@ -199,6 +199,9 @@ class App {
 
             videoPanel.addToggle("Loop", this.loop, (v) => {
                 this.loop = v;
+                if(this.video) {
+                    this.video.loop = v;
+                }
             });
             videoPanel.endLine();
 
@@ -419,7 +422,7 @@ class App {
                 // Second frame
                 mixer.setTime(track.times[t+1]);
                 this.performs.currentCharacter.model.updateMatrixWorld(true);
-
+                
                 const bone2 = this.performs.currentCharacter.model.getObjectByName(boneName);
                 let localPosition2 = new THREE.Vector3();
 
@@ -447,7 +450,7 @@ class App {
                 colors.push(color.r, color.g, color.b, 0.8);
                 // colors.push(color.r, color.g, color.b);
 
-                const arrow = customArrow(position2.x, position2.y, position2.z, position.x, position.y, position.z, 0.0008, color)
+                const arrow = customArrow(position2.x, position2.y, position2.z, position.x, position.y, position.z,  this.trajectories[trajectory].thickness*0.0002, color)
                 arrow.name = t;
                 this.trajectories[trajectory].add(arrow);
             }
@@ -463,11 +466,11 @@ class App {
             const material = new LineMaterial({
                 vertexColors: true,
                 dashed: false,
-                alphaToCoverage: false,
+                alphaToCoverage: true,
                 linewidth: this.trajectories[trajectory].thickness,
                 vertexShader: vertexShader,
                 fragmentShader: fragmentShader,
-                transparent: true
+                transparent: true,
             });
             material.resolution.set(window.innerWidth, window.innerHeight);
 
@@ -501,10 +504,10 @@ class App {
                 const arrow = this.trajectories[trajectory].getObjectByName(frame);
                 let alpha = 0;
                 if(frame < startFrame) {
-                    alpha = (frame - startFrame)/offset;
+                    alpha = (frame - startFrame)/10;
                 }
                 else if(frame > endFrame) {
-                    alpha = (endFrame - frame)/offset;
+                    alpha = (endFrame - frame)/10;
                 }
                 const opacity = Math.max(0,Math.min(1,0.8 + alpha));
                 colors[frame*8+3] = opacity;
@@ -514,41 +517,6 @@ class App {
             line.geometry.setColors(colors);
         }
 
-        // for(let trajectory in this.trajectories) {
-        //     let positions = this.trajectories[trajectory].positions;
-        //     let colors = this.trajectories[trajectory].colors;
-        //     for(let i = 0; i < this.trajectories[trajectory].children.length; i++) {
-        //         if(this.trajectories[trajectory].children[i].name == "line") {
-        //             //positions = positions.slice(startFrame*3, (endFrame+2)*3);
-        //             //colors = colors.slice(startFrame*3, (endFrame+2)*3);
-        //             const totalFrames = positions.length/3;
-        //             for(let frame = 0; frame < totalFrames; frame++) {
-
-        //                 let alpha = 0;
-        //                 if(frame < startFrame) {
-        //                     alpha = -1; //(frame - startFrame)/startFrame;
-        //                 }
-        //                 else if(frame > endFrame) {
-        //                     alpha = -1;//(endFrame - frame)/(totalFrames - endFrame);
-        //                 }
-        //                 colors[frame*8+3] = Math.max(0,Math.min(1,1 + alpha));
-        //                 colors[frame*8+7] = Math.max(0,Math.min(1,1 + alpha));
-        //             }
-        //             //this.trajectories[trajectory].children[i].geometry.setPositions(positions);
-        //             this.trajectories[trajectory].children[i].geometry.setColors(colors);
-        //             //this.trajectories[trajectory].children[i].geometry.setAttribute( 'color', new THREE.Float32BufferAttribute( colors, 4 ) );
-
-        //             continue;
-        //         }
-        //         const frame = Number(this.trajectories[trajectory].children[i].name);
-        //         if(frame < startFrame  || frame > endFrame) {
-        //             this.trajectories[trajectory].children[i].visible = false;
-        //         }
-        //         else {
-        //             this.trajectories[trajectory].children[i].visible = true;
-        //         }
-        //     }
-        // }
     }
 
     showTrajectoriesDialog() {
@@ -563,7 +531,7 @@ class App {
             //     this.updateTrajectories( this.trajectoryStart, this.trajectoryEnd);
             // }, {min: 0, max: this.trajectories["LeftHand"].children.length, step: 1});
 
-            p.addNumber("Window", this.trajectoryWindow, (v) => {
+            p.addNumber("Window width (frames to show)", this.trajectoryWindow, (v) => {
                 this.trajectoryWindow = v;
             }, {min: 0, max: Math.ceil(this.trajectories["LeftHand"].children.length - 1), step: 1});
 
@@ -642,12 +610,12 @@ class App {
         const canvasCtx = this.characterCanvas.getContext('2d');
         canvasCtx.clearRect(0, 0, this.characterCanvas.width, this.characterCanvas.height);
 
-        this.video.onloadeddata = async (e) => {
+        this.video.onloadedmetadata = async (e) => {
 
             this.videoCanvas.width =  this.video.videoWidth;
             this.videoCanvas.height = this.video.videoHeight;
             this.video.currentTime = 0.0;
-
+            this.video.loop = this.loop;
             this.videoCanvas.classList.remove("hidden");
             this.video.classList.remove("hidden");
 
@@ -737,10 +705,22 @@ class App {
 
         this.video.ontimeupdate = (e) => {
             const mixer = this.performs.currentCharacter.mixer;
+            const animDuration = mixer._actions[0]._clip.duration;
             if( this.video.paused ) {
                 mixer.timeScale = 1;
-                mixer.setTime(this.video.currentTime);
+                const time = Math.min(this.video.currentTime, animDuration);
+                mixer.setTime(time);
             }
+            else {
+                if( this.video.currentTime > animDuration ) {
+                    mixer.timeScale = 0;
+                }
+                else if( mixer.timeScale == 0) {
+                    mixer.timeScale = this.speed;
+                    mixer.setTime(this.video.currentTime);
+                }
+            } 
+
         }
 
         this.video.onended = (e) => {
@@ -1583,19 +1563,16 @@ function createBodyAnimationFromWorldLandmarks( worldLandmarksArray, skeleton ){
     // return new THREE.AnimationClip( "animation", -1, tracks );
 }
 
-const ARROW_HEAD = new THREE.ConeGeometry( 1, 1, 12 )
-                                        .rotateX( Math.PI/2)
-                                        .translate( 0, 0, -0.5 );
-
-
 function customArrow( fx, fy, fz, ix, iy, iz, thickness, color)
 {
     const material = new THREE.MeshLambertMaterial( {color: color, transparent: true} );
 
     const length = Math.sqrt( (ix-fx)**2 + (iy-fy)**2 + (iz-fz)**2 );
 
-    const head = new THREE.Mesh( ARROW_HEAD, material );
+    const geometry = new THREE.ConeGeometry( 1, 1, 12 ).rotateX( Math.PI/2).translate( 0, 0, -0.5 );
+    const head = new THREE.Mesh( geometry, material );
     head.position.set( 0, 0, length );
+
     if(length < 0.01) {
         head.scale.set( 0, 0, 0 );
     }
