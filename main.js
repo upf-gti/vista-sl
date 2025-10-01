@@ -194,14 +194,21 @@ class App {
             videoPanel.addNumber("Speed", this.speed, (v) => {
                 this.speed = v;
                 this.video.playbackRate = v;
+                const mixer = this.performs.currentCharacter.mixer;
+                const animDuration = mixer._actions[0]._clip.duration;
+
+                if( this.video.currentTime < animDuration ) {
+                    mixer.timeScale = v;
+                }
                 
             }, {min: 0, max: 2, step: 0.01, width: "40%" });
 
             videoPanel.addToggle("Loop", this.loop, (v) => {
                 this.loop = v;
-                if(this.video) {
-                    this.video.loop = v;
-                }
+                this.videoEditor.loop = v;
+                // if(this.video) {
+                //     this.video.loop = v;
+                // }
             });
             videoPanel.endLine();
 
@@ -603,10 +610,13 @@ class App {
         }, {size:["50%", "auto"], draggable: true, })
     }
 
+   
+
     async loadVideo( signName ) {
 
         const landmarksDataUrl = 'https://catsl.eelvex.net/static/vid_data/teacher-' + signName + '/teacher-' + signName + '_keyframe_1.json';
         this.video.src = `https://catsl.eelvex.net/static/vid/teacher-${signName}.mp4`;
+
         const canvasCtx = this.characterCanvas.getContext('2d');
         canvasCtx.clearRect(0, 0, this.characterCanvas.width, this.characterCanvas.height);
 
@@ -694,13 +704,23 @@ class App {
             mixer.timeScale = 1;
             mixer.setTime(this.video.currentTime);
             mixer.timeScale = this.speed;
+            // this.video.currentTime = this.videoEditor.startFrame;
         }
 
         this.video.onpause = (e) => {
             const mixer = this.performs.currentCharacter.mixer;
             this.performs.keyframeApp.changePlayState(!this.video.paused);
-            mixer.timeScale = 1;
-            mixer.setTime(this.video.currentTime);
+
+            if(this.video.currentTime >= this.videoEditor.endTime && this.loop) {
+                // this.video.currentTime = this.videoEditor.startTime;
+                // this.video.play();
+                this.performs.keyframeApp.changePlayState(!this.video.paused);
+            }
+            // else {
+
+            //     mixer.timeScale = 1;
+            // }
+            //mixer.setTime(this.video.currentTime);
         }
 
         this.video.ontimeupdate = (e) => {
@@ -712,7 +732,7 @@ class App {
                 mixer.setTime(time);
             }
             else {
-                if( this.video.currentTime > animDuration ) {
+                if( this.video.currentTime >= animDuration ) {
                     mixer.timeScale = 0;
                 }
                 else if( mixer.timeScale == 0) {
@@ -725,10 +745,11 @@ class App {
 
         this.video.onended = (e) => {
             const mixer = this.performs.currentCharacter.mixer;
-            mixer.setTime(0);
+            mixer.setTime(this.videoEditor.startTime);
             this.performs.keyframeApp.changePlayState(false);
             if( this.loop ) {
-                this.video.currentTime = 0;
+                this.video.pause();
+                this.video.currentTime = this.videoEditor.startTime;
                 this.video.play();
             }
         }
@@ -801,7 +822,7 @@ class App {
         canvasCtx.clearRect(0, 0, this.characterCanvas.width, this.characterCanvas.height);
     }
 
-    async animate() {
+    async animate( dt ) {
 
         this.mediapipeScene.leftHandPoints.visible = false;
         this.mediapipeScene.rightHandPoints.visible = false;
