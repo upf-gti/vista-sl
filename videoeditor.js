@@ -388,7 +388,124 @@ class VideoEditor {
         const style = getComputedStyle(bottomArea.root);
         let padding = Number(style.getPropertyValue('padding').replace("px",""));
         this.timebar = new TimeBar(timeBarArea, TimeBar.TIMEBAR_TRIM, {offset: padding});
+        
+        const timeline = Object.assign({}, this.timebar);
+        timeline.timeToX = (x) => { return this.timeToX(x) };
+        timeline.topMargin = 0;
+        //timeline.canvas.height = this.timebar.canvas.height - this.timebar.topMargin*2;
+        this.propagationWindow = new PropagationWindow( timeline );
+        this.propagationWindow.enabler = true;
 
+        this.propagationWindow.draw = function() {
+        if ( !this.enabler || this.timeline.playing ){ return; }
+
+        const timeline = this.timeline;
+        const ctx = timeline.canvas.getContext("2d");
+
+        let { rightSize, leftSize, rectWidth, rectHeight, rectPosX, rectPosY } = this._getBoundingRectInnerWindow();
+
+        rectPosY += 2;//this.timeline.offset;
+        rectHeight -= 2;//this.timeline.offset;
+        // compute radii
+        let radii = this.visualState == PropagationWindow.STATE_SELECTED ? (timeline.trackHeight * 0.4) : timeline.trackHeight;
+        let leftRadii = leftSize > radii ? radii : leftSize;
+        leftRadii = rectHeight > leftRadii ? leftRadii : rectHeight;
+        
+        let rightRadii = rightSize > radii ? radii : rightSize;
+        rightRadii = rectHeight > rightRadii ? rightRadii : rectHeight;
+                
+        let radiusTL, radiusBL, radiusTR, radiusBR;
+        radiusTL = 2;//leftRadii;
+        radiusBL = 2//this.visualState ? 0 : leftRadii;
+        radiusTR = 2//rightRadii;
+        radiusBR = 2//this.visualState ? 0 : rightRadii;
+        const radius = 2;
+
+        // draw window rect
+        if ( this.visualState && this.opacity ){
+            let gradient = ctx.createLinearGradient(rectPosX, rectPosY, rectPosX + rectWidth, rectPosY );
+            gradient.addColorStop(0, this.gradientColorLimits);
+            for( let i = 0; i < this.gradient.length; ++i){
+                const g = this.gradient[i];
+                gradient.addColorStop(g[0], this.gradientColor + "," + g[1] +")");
+            }
+            gradient.addColorStop(1,this.gradientColorLimits);
+            ctx.fillStyle = gradient;
+            ctx.globalAlpha = this.opacity;
+    
+            ctx.beginPath();
+            ctx.moveTo(rectPosX + radius, rectPosY);
+            ctx.lineTo(rectPosX + rectWidth - radius, rectPosY);
+            ctx.quadraticCurveTo(rectPosX + rectWidth, rectPosY, rectPosX + rectWidth, rectPosY+ radius);
+            ctx.lineTo(rectPosX + rectWidth, rectPosY + rectHeight - radius);
+            ctx.quadraticCurveTo(rectPosX + rectWidth, rectPosY + rectHeight, rectPosX + rectWidth - radius, rectPosY + rectHeight);
+            ctx.lineTo(rectPosX + radius, rectPosY + rectHeight);
+            ctx.quadraticCurveTo(rectPosX, rectPosY + rectHeight, rectPosX, rectPosY + rectHeight - radius);
+            ctx.lineTo(rectPosX, rectPosY + radius);
+            ctx.quadraticCurveTo(rectPosX, rectPosY, rectPosX + radius, rectPosY);
+            ctx.closePath();
+            // ctx.beginPath();
+    
+            // ctx.moveTo(rectPosX, rectPosY + radiusTL);
+            // ctx.quadraticCurveTo(rectPosX, rectPosY, rectPosX + radiusTL, rectPosY );
+            // ctx.lineTo( rectPosX + rectWidth - radiusTR, rectPosY );
+            // ctx.quadraticCurveTo(rectPosX + rectWidth, rectPosY, rectPosX + rectWidth, rectPosY + radiusTR );
+            // ctx.lineTo( rectPosX + rectWidth, rectPosY + rectHeight - radiusBR );
+            // ctx.quadraticCurveTo(rectPosX + rectWidth, rectPosY + rectHeight, rectPosX + rectWidth - radiusBR, rectPosY + rectHeight );
+            // ctx.lineTo( rectPosX + radiusBL, rectPosY + rectHeight );
+            // ctx.quadraticCurveTo(rectPosX, rectPosY + rectHeight, rectPosX, rectPosY + rectHeight - radiusBL );
+    
+            // ctx.closePath();
+            ctx.fill();
+            ctx.globalAlpha = 1;
+        }
+        
+        // borders
+        ctx.strokeStyle = this.borderColor;
+
+        ctx.lineWidth = 3;
+            // ctx.beginPath();
+            // ctx.moveTo(rectPosX + radius, rectPosY);
+            // ctx.lineTo(rectPosX + rectWidth - radius, rectPosY);
+            // ctx.quadraticCurveTo(rectPosX + rectWidth, rectPosY, rectPosX + rectWidth, rectPosY+ radius);
+            // ctx.lineTo(rectPosX + rectWidth, rectPosY + rectHeight - radius);
+            // ctx.quadraticCurveTo(rectPosX + rectWidth, rectPosY + rectHeight, rectPosX + rectWidth - radius, rectPosY + rectHeight);
+            // ctx.lineTo(rectPosX + radius, rectPosY + rectHeight);
+            // ctx.quadraticCurveTo(rectPosX, rectPosY + rectHeight, rectPosX, rectPosY + rectHeight - radius);
+            // ctx.lineTo(rectPosX, rectPosY + radius);
+            // ctx.quadraticCurveTo(rectPosX, rectPosY, rectPosX + radius, rectPosY);
+            // ctx.closePath();
+        ctx.beginPath();
+        ctx.moveTo(rectPosX, rectPosY + 15);
+        ctx.quadraticCurveTo(rectPosX, rectPosY, rectPosX + 15, rectPosY );
+        ctx.moveTo( rectPosX + rectWidth - 15, rectPosY );
+        ctx.quadraticCurveTo(rectPosX + rectWidth, rectPosY, rectPosX + rectWidth, rectPosY + 15 );
+        ctx.moveTo( rectPosX + rectWidth, rectPosY + rectHeight - 15 );
+        ctx.quadraticCurveTo(rectPosX + rectWidth, rectPosY + rectHeight, rectPosX + rectWidth - 15, rectPosY + rectHeight );
+        ctx.moveTo( rectPosX + 15, rectPosY + rectHeight );
+        ctx.quadraticCurveTo(rectPosX, rectPosY + rectHeight, rectPosX, rectPosY + rectHeight - 15 );
+        ctx.stroke();
+        ctx.lineWidth = 1.5;
+
+        let lineSize = timeline.trackHeight;
+        let remaining = rectHeight - timeline.trackHeight;
+        let amount = 0;
+        if (lineSize > 0){
+            amount = Math.ceil(remaining/lineSize);
+            lineSize = remaining / amount;
+        }
+
+        let start = rectPosY + timeline.trackHeight * 0.5;
+        for( let i = 0; i < amount; ++i ){
+            ctx.moveTo(rectPosX, start + lineSize * i + lineSize*0.3);
+            ctx.lineTo(rectPosX, start + lineSize * i + lineSize*0.7);
+            ctx.moveTo(rectPosX + rectWidth, start + lineSize * i + lineSize*0.3);
+            ctx.lineTo(rectPosX + rectWidth, start + lineSize * i + lineSize*0.7);
+        }
+        ctx.stroke();
+        ctx.lineWidth = 1;
+        // end of borders
+    }
         // Create controls panel (play/pause button and start time)
         this.controlsPanelLeft = new LX.Panel({className: 'lexcontrolspanel'});
         this.controlsPanelLeft.refresh = () => {
@@ -484,12 +601,18 @@ class VideoEditor {
         // Add canvas event listeneres
         parent.addEventListener( "mousedown", (event) => {
             if(this.controls) {
-                this.timebar.onMouseDown(event);
+                this.propagationWindow.onMouse(event);
+                if(!this.propagationWindow.resizing) {
+                    this.timebar.onMouseDown(event);
+                }
             }
         });
         parent.addEventListener( "mouseup",   (event) => {
             if(this.controls) {
-                this.timebar.onMouseUp(event);
+                this.propagationWindow.onMouse(event);
+                if(!this.propagationWindow.resizing) {
+                    this.timebar.onMouseUp(event);
+                }
             }
 
             if( ( this.isDragging || this.isResizing ) && this.onCropArea ) {
@@ -503,7 +626,11 @@ class VideoEditor {
         });
         parent.addEventListener( "mousemove", (event) => {
             if(this.controls) {
-                this.timebar.onMouseMove(event);
+                const t = this.xToTime( event.offsetX)
+                this.propagationWindow.onMouse(event, t);
+                if(!this.propagationWindow.resizing) {
+                    this.timebar.onMouseMove(event);
+                }
             }
 
             if (this.isResizing) {
@@ -642,7 +769,7 @@ class VideoEditor {
                 this.video.currentTime = this.startTime;
                 console.log("duration changed from", this.endTime, " to ", this.video.duration);
                 this.endTime = this.video.duration;
-                const x = this._timeToX(this.endTime);
+                const x = this.timeToX(this.endTime);
                 this._setEndValue(x);
             }
             this.video.currentTime = this.startTime;
@@ -655,7 +782,7 @@ class VideoEditor {
         
         this._setEndValue(this.timebar.endX);
         this._setStartValue(this.timebar.startX);
-        this.timebar.currentX = this._timeToX(this.video.currentTime);
+        this.timebar.currentX = this.timeToX(this.video.currentTime);
         this._setCurrentValue(this.timebar.currentX, false);
         this.timebar.update(this.timebar.currentX);
         
@@ -691,6 +818,7 @@ class VideoEditor {
         if(this.onDraw) {
             this.onDraw();
         }
+        this.propagationWindow.draw();
         if(this.playing) {
             if( this.video.currentTime + 0.000001 >= this.endTime) {
                 this.video.pause();
@@ -703,7 +831,7 @@ class VideoEditor {
                     this.video.play();
                 }
             }
-            const x = this._timeToX(this.video.currentTime);
+            const x = this.timeToX(this.video.currentTime);
             this._setCurrentValue(x, false);
             this.timebar.update(x);
         }
@@ -711,19 +839,20 @@ class VideoEditor {
         this.requestId = requestAnimationFrame(this._update.bind(this));
     }
 
-    _xToTime (x) {
+    xToTime (x) {
         return ((x - this.timebar.offset) / (this.timebar.lineWidth)) *  this.video.duration;
     }
 
-    _timeToX (time) {
+    timeToX (time) {
         return (time / this.video.duration) *  (this.timebar.lineWidth) + this.timebar.offset;
     }
 
     _setCurrentValue ( x, updateTime = true ) {
-        const t = this._xToTime(x);
+        const t = this.xToTime(x);
 
         if(updateTime) {
             this.video.currentTime = t;
+            this.propagationWindow.setTime(t);
         }
         //console.log( "Computed: " + t)
         let mzminutes = Math.floor(t / 60);
@@ -742,7 +871,7 @@ class VideoEditor {
     }
 
     _setStartValue ( x ) {
-        const t = this._xToTime(x);
+        const t = this.xToTime(x);
         this.startTime = this.video.currentTime = t;
 
         let mzminutes = Math.floor(t / 60);
@@ -764,7 +893,7 @@ class VideoEditor {
     }
 
     _setEndValue ( x ) {
-        const t = this._xToTime(x);
+        const t = this.xToTime(x);
         this.endTime = this.video.currentTime = t;
 
         let mzminutes = Math.floor(t / 60);
@@ -859,5 +988,627 @@ class VideoEditor {
 }
 
 LX.VideoEditor = VideoEditor;
+
+class PropagationWindow {
+
+    static STATE_BASE = 0;
+    static STATE_HOVERED = 1;
+    static STATE_SELECTED = 2;
+    /*
+     * @param {Lexgui timeline} timeline must be valid 
+     */
+    constructor( timeline ){
+
+        this.savedCurves = []; // array of { imageSrc, values }
+        this.timeline = timeline; // will provide the canvas
+        
+        this.curveWidget = null; 
+        this.visualState = false;
+        
+        this.enabler = false;
+        this.resizing = 0; // -1 resizing left, 0 nothing, 1 resizing right
+
+        this.time = 0; // seconds
+        this.rightSide = 1; // seconds
+        this.leftSide = 1;  // seconds
+
+        this.opacity = 0.6;
+        this.lexguiColor = '#273162';
+        this.gradientColorLimits = "rgba( 39, 49, 98, 0%)"; // relies on lexgui input
+        this.gradientColor = "rgba( 39, 49, 98"; // relies on lexgui input
+        this.borderColor = LX.getThemeColor( "global-text-secondary" );
+        this.gradient = [ [0.5,1] ]; // implicit 0 in the borders. Shares array reference with curve Widget
+        // radii = 100;
+
+        // create curve Widget
+        const bgColor = "#cfcdcd"; // relies on lexgui input
+        const pointsColor = "#273162"; // relies on lexgui input
+        const lineColor = "#1c1c1d"; // relies on lexgui input
+        const lpos = timeline.timeToX( this.time - this.leftSide );
+        const rpos = timeline.timeToX( this.time + this.rightSide );
+
+        // curveWidget and this.gradient share the same array reference
+        this.curveWidget = new LX.Curve( null, this.gradient, (v,e) => {
+                if ( v.length <= 0){
+                    this.curveWidget.curveInstance.element.value = this.gradient = [[0.5,1]];
+                    this.curveWidget.curveInstance.redraw();
+                }
+            },
+            {xrange: [0,1], yrange: [0,1], allowAddValues: true, moveOutAction: LX.CURVE_MOVEOUT_DELETE, smooth: 0, signal: "@propW_gradient", width: rpos-lpos -0.5, height: 25, bgColor, pointsColor, lineColor } 
+        );
+        const curveElement = this.curveWidget.root; 
+        curveElement.style.width = "fit-content";
+        curveElement.style.height = "fit-content";
+        curveElement.style.position = "fixed";
+        curveElement.style.borderRadius = "0px";
+        curveElement.children[0].style.borderRadius = "0px 0px " + timeline.trackHeight*0.4 +"px " + timeline.trackHeight*0.4 +"px";
+        curveElement.style.zIndex = "0.5";
+        curveElement.style.padding = "0px";
+
+        // hidden, used to save images of the window values
+        this.helperCurves = new LX.Curve( null, this.gradient, (v,e) => {
+                if ( v.length <= 0){
+                    this.curveWidget.curveInstance.element.value = this.gradient = [[0.5,1]];
+                    this.curveWidget.curveInstance.redraw();
+                }
+            },
+            {xrange: [0,1], yrange: [0,1], disabled: true, bgColor, pointsColor:"#0003C2FF", lineColor } 
+        );
+        const helper = this.helperCurves.root; 
+        helper.remove(); // from dom
+        helper.style.width = "fit-content";
+        helper.style.height = "fit-content";
+        helper.style.position = "fixed";
+        const helperCanvas = this.helperCurves.curveInstance.canvas;
+        helperCanvas.width = 400;
+        helperCanvas.style.width = "400px";
+        helperCanvas.height = 30;
+        helperCanvas.style.height = "30px";
+
+
+        const computeGradientFromFormula = (f, df) => {
+            let left = [];
+            let right = [];
+            const defaultDelta = 0.1;
+            let status = true;
+            for( let i = 0; status; ){
+                if( i > 1 ){
+                    i = 1;
+                    status = false;
+                }
+                let y = f(i);
+
+                left.push( [ Math.clamp( i*0.5, 0 , 0.5 ) , Math.clamp(y, 0,1)] );
+                if ( status ){
+                    right.push( [Math.clamp( 1-i*0.5, 0.5 , 1 ), Math.clamp(y, 0,1)] )
+                }
+                let der = Math.abs(df(i));
+                der = der > 0 ? Math.clamp( defaultDelta / der, 0.08, 0.2 ) : 0.05; // modify delta to add to 'i' depending on derivative
+                i += der;
+            }
+
+            let result = left.concat(right.reverse());
+            this.saveGradient( result, 1, 1 );
+        }
+
+        
+        // cards are drawn from last to first. Make lower cards the least expected curves
+        computeGradientFromFormula( (x) =>{ return 1-x*x*x*x }, (x) =>{ return -4*x*x*x } );
+        computeGradientFromFormula( (x) =>{ return 1-(Math.sin(x * Math.PI - Math.PI*0.5) *0.5 + 0.5); }, (x) =>{ return -Math.cos(x * Math.PI - Math.PI*0.5) *0.5 * Math.PI; } );
+        computeGradientFromFormula( (x) =>{ return x*x*x*x }, (x) =>{ return 4*x*x*x } );
+        computeGradientFromFormula( (x) =>{ return x*x }, (x) =>{ return 2*x } );
+        computeGradientFromFormula( (x) =>{ return Math.sin(x * Math.PI - Math.PI*0.5) *0.5 + 0.5; }, (x) =>{ return Math.cos(x * Math.PI - Math.PI*0.5) *0.5 * Math.PI; } );
+        computeGradientFromFormula( (x) =>{ let a = 1-x; return 1-a*a*a*a }, (x) =>{ let a = 1-x; return -4*a*a*a } );
+        computeGradientFromFormula( (x) =>{ let a = 1-x; return 1-a*a }, (x) =>{ let a = 1-x; return -2*a } );
+        this.saveGradient( [[0.5,1]], 1, 1 );
+        
+        this.setGradient([[0.5,1]]); 
+        this.makeCurvesSelectorMenu();
+        
+        this.updateTheme();
+        LX.addSignal( "@on_new_color_scheme", (el, value) => {
+            // Retrieve again the color using LX.getThemeColor, which checks the applied theme
+            this.updateTheme();
+        } )
+    }
+
+    makeCurvesSelectorMenu(){
+
+        let prevStates = 0;
+        if ( this.sideMenu ){
+            prevStates |= !this.sideMenu.root.classList.contains("hidden"); 
+            prevStates |= (!this.panelCurves.root.classList.contains("hidden")) << 1;
+            prevStates = prevStates * (this.visualState == PropagationWindow.STATE_SELECTED);
+
+            this.sideMenu.clear();
+            this.sideMenu.root.remove();
+            this.panelCurves.clear();
+            this.panelCurves.root.remove();
+        }
+        const sideMenu = this.sideMenu = new LX.Panel( {id: "PropagationWindowSideOptions", width: "50px", height: "75px" } );
+        sideMenu.root.style.zIndex = "0.5";
+        sideMenu.root.style.position = "fixed";
+        sideMenu.root.background = "transparent";
+        
+        sideMenu.addButton(null, "", (v,e)=>{ 
+            this.panelCurves.root.classList.toggle("hidden");
+            this.updateCurve();
+        }, { icon: "ChartSpline", title: "Show saved curves" } );
+        
+        sideMenu.addButton(null, "", (v,e)=>{ 
+            this.saveGradient( this.gradient, this.leftSide, this.rightSide );
+            this.makeCurvesSelectorMenu(); // overkill for just adding a card to the panel
+            this.updateCurve();
+            LX.toast("Propagation Window Saved", null, { timeout: 7000 } );
+
+        }, { icon: "Save", title: "Save current curve" } );
+
+        const panelCurves  = this.panelCurves = new LX.Panel( {id:"panelCurves", width:"auto", height: "auto"});
+        panelCurves.root.background = "transparent";
+        for( let i = this.savedCurves.length-1; i > -1; --i ){
+            const values = this.savedCurves[i].values;
+            let card = panelCurves.addCard(null, { img: this.savedCurves[i].imgURL, callback:(v,e)=>{
+                const gradient = JSON.parse(JSON.stringify(values));
+                this.recomputeGradient( gradient, 1, 1, this.leftSide, this.rightSide ); // stored gradient is centered. Readjust to current window size
+                this.setGradient( gradient ); 
+            }, className: "p-1 my-0"});
+            card.root.children[0].children[1].remove();
+            card.root.children[0].children[0].style.height = "auto";
+            card.root.children[0].classList.add("my-0");
+            card.root.children[0].classList.add("pb-1");
+            card.root.children[0].children[0].classList.add("my-0");
+            card.root.children[0].children[0].classList.add("p-0");
+            card.root.classList.add("leading-3");
+            
+        }
+        panelCurves.root.style.zIndex = "0.5";
+        panelCurves.root.style.position = "fixed";
+        panelCurves.root.style.background = "var(--global-color-tertiary)";
+        panelCurves.root.style.borderRadius = "10px";
+        panelCurves.root.classList.add("showScrollBar");
+
+        if ( !(prevStates & 0x01) ){
+            sideMenu.root.classList.add("hidden");
+        }
+        if ( !(prevStates & 0x02) ){
+            panelCurves.root.classList.add("hidden");
+        }
+
+        document.body.appendChild(sideMenu.root);
+        document.body.appendChild(panelCurves.root);
+    }
+
+    updateTheme(){
+        this.borderColor = LX.getThemeColor( "global-text-secondary" );
+    }
+
+    setEnabler( v ){
+        this.enabler = v;
+        if(!v) {
+            this.setVisualState( PropagationWindow.STATE_BASE );
+        }
+        LX.emit( "@propW_enabler", this.enabler );
+    }
+    
+    toggleEnabler(){
+        this.setEnabler( !this.enabler );
+    }
+
+    saveGradient( gradientToSave, leftSize, rightSize ){
+        const gradient = JSON.parse(JSON.stringify(gradientToSave));
+        this.recomputeGradient(gradient, leftSize, rightSize, 1,1 ); // centre gradient
+
+        // for some reason width is sometimes 0
+        this.helperCurves.curveInstance.canvas.width = 400;
+        this.helperCurves.curveInstance.canvas.style.width = "400px";
+        this.helperCurves.curveInstance.canvas.height = 30;
+        this.helperCurves.curveInstance.canvas.style.height = "30px";
+        
+        this.helperCurves.curveInstance.element.value = gradient;
+        this.helperCurves.curveInstance.redraw();
+
+        // vertical line that separates Left and Right sides of the window
+        const ctx = this.helperCurves.curveInstance.canvas.getContext("2d");
+        ctx.strokStyle = "black";
+        ctx.beginPath();
+        ctx.moveTo(200,0);
+        ctx.lineTo(200,2.5);
+        ctx.moveTo(200,7.5);
+        ctx.lineTo(200,12.5);
+        ctx.moveTo(200,17.5);
+        ctx.lineTo(200,22.5);
+        ctx.moveTo(200,27.5);
+        ctx.lineTo(200,30);
+        ctx.stroke();
+
+        let c ={
+            imgURL: this.helperCurves.curveInstance.canvas.toDataURL("image/png"),
+            values: gradient
+        }
+        this.savedCurves.push(c);
+    }
+
+    /**
+     * set curve widget values
+     * @param {*} newGradient [ [x,y] ].   0 < x < 0.5 left side of window. 0.5 < x < 1 right side of window
+     */
+    setGradient( newGradient ){
+        this.curveWidget.curveInstance.element.value = this.gradient = newGradient;
+        this.curveWidget.curveInstance.redraw();
+    }
+
+    /**
+     * The window has a left side and a right side. They might be of different magnitudes. Since gradient's domain is [0,1], the midpoint will not always be in the middle
+     * @param {Array} gradient 
+     * @param {Num} oldLeft > 0
+     * @param {Num} oldRight > 0
+     * @param {Num} newLeftSide > 0
+     * @param {Num} newRightSide > 0
+     */
+    recomputeGradient( gradient, oldLeft, oldRight, newLeftSide, newRightSide ){
+        let g = gradient;
+
+        const oldMid = oldLeft / (oldLeft + oldRight);
+        const newMid = newLeftSide / (newLeftSide + newRightSide);
+        for( let i = 0; i < g.length; ++i ){
+            let gt = g[i][0]; 
+            if ( gt <= oldMid ){
+                g[i][0] = ( gt / oldMid ) * newMid;
+            }
+            else{
+            g[i][0] = ( (gt - oldMid) / (1-oldMid)) * (1-newMid) + newMid ;
+            }
+        }
+    }
+
+    setTimeline( timeline ){
+        this.timeline = timeline;
+        
+        this.curveWidget.root.remove(); // remove from dom, wherever this is
+        if(this.visualState){
+            const area = this.timeline.canvasArea ? this.timeline.canvasArea.root : this.timeline.canvas;
+            area.appendChild( this.curveWidget.root );
+            this.updateCurve( true );
+        }
+    }
+
+    /**
+     * 
+     * @param {Num} newLeftSide > 0, size of left side
+     * @param {Num} newRightSide > 0, size of right side 
+     */
+    setSize( newLeftSide, newRightSide ){
+        this.recomputeGradient(this.gradient, this.leftSide, this.rightSide, newLeftSide, newRightSide);
+        this.leftSide = newLeftSide;
+        this.rightSide = newRightSide;
+        if( this.visualState > PropagationWindow.STATE_BASE ){
+            this.updateCurve(true);
+        }
+    }
+
+    setTime( time ){
+        this.time = time;
+        this.updateCurve(); // update only position
+    }
+
+    onOpenConfig(dialog){
+        dialog.addToggle("Enable", this.enabler, (v) =>{
+            this.setEnabler(v);
+        }, { className: "success", label: "", signal: "@propW_enabler"});
+
+        dialog.sameLine();
+        let w = dialog.addNumber("Min", this.leftSide, (v) => {
+            this.setSize( v, this.rightSide );
+        }, {min: 0.001, step: 0.001, units: "s", precision: 3, signal: "@propW_minT", width:"50%"});
+        w.root.style.paddingLeft = 0;
+        dialog.addNumber("Max", this.rightSide, (v) => {
+            this.setSize( this.leftSide, v );
+        }, {min: 0.001, step: 0.001, units: "s", precision: 3, signal: "@propW_maxT", width:"50%"});
+        dialog.endLine();
+
+        dialog.addColor("Color", this.lexguiColor, (value, event) => {
+            this.lexguiColor = value;
+            let rawColor = parseInt(value.slice(1,7), 16);
+            let color = "rgba(" + ((rawColor >> 16) & 0xff) + "," + ((rawColor >> 8) & 0xff) + "," + (rawColor & 0xff);
+            this.gradientColorLimits = color + ",0%)"; 
+            this.gradientColor = color;
+
+            this.curveWidget.curveInstance.element.pointscolor = color + ")";
+            this.curveWidget.curveInstance.redraw();
+
+            this.opacity = parseInt(value[7]+value[8], 16) / 255.0;
+        }, {useAlpha: true});
+    }
+
+    onMouse( e, time ){
+
+        if( !this.enabler ){ return false; }
+
+        const timeline = this.timeline;
+        e.localX = e.localX || e.offsetX;
+        e.localY = e.localY || e.offsetY;
+        const windowRect = this._getBoundingRectInnerWindow();
+        const lpos = windowRect.rectPosX;
+        const rpos = windowRect.rectPosX + windowRect.rectWidth;
+
+        const timelineState = timeline.grabbing | timeline.grabbingTimeBar | timeline.grabbingScroll | timeline.movingKeys | timeline.boxSelection;
+        
+        const isInsideResizeLeft = Math.abs( e.localX - lpos ) < 7 && e.localY > windowRect.rectPosY;
+        const isInsideResizeRight = Math.abs( e.localX - rpos ) < 7 && e.localY > windowRect.rectPosY;
+
+        if ( !timelineState && ( isInsideResizeLeft || isInsideResizeRight ) ){
+            timeline.canvas.style.cursor = "col-resize";
+        }
+        
+        if ( e.type == "mousedown" && (isInsideResizeLeft || isInsideResizeRight) ){
+            this.resizing = isInsideResizeLeft ? -1 : 1; 
+            this.sideMenu.root.style.pointerEvents = "none";
+            this.panelCurves.root.style.pointerEvents = "none";
+            this.curveWidget.root.style.pointerEvents = "none";
+        }
+
+        if( e.localX >= lpos && e.localX <= rpos && e.localY > windowRect.rectPosY && e.localY <= (windowRect.rectPosY + windowRect.rectHeight)) {
+            if( this.visualState == PropagationWindow.STATE_BASE ){
+                this.setVisualState( PropagationWindow.STATE_HOVERED );
+            }
+        }
+        else if(!this.resizing) { // outside of window
+            
+            if(e.type == "mousedown" && this.visualState && e.localY > timeline.lastTrackTreesWidgetOffset ) {
+                this.setVisualState( PropagationWindow.STATE_BASE );
+            }
+            else if( this.visualState == PropagationWindow.STATE_HOVERED ){
+                this.setVisualState( PropagationWindow.STATE_BASE );
+            }
+        }
+
+        if ( this.resizing && e.type == "mousemove" ){
+            if ( !e.buttons ){ // mouseUp outside the canvas. Stop resizing
+                this.resizing = 0;
+                this.sideMenu.root.style.pointerEvents = "";
+                this.panelCurves.root.style.pointerEvents = "";
+                this.curveWidget.root.style.pointerEvents = "";
+            }
+            else if ( this.resizing == 1 ){
+                const t = Math.max( 0.001, time - this.time ); 
+                this.setSize( this.leftSide, t );
+                LX.emit("@propW_maxT", t, true); 
+            }else{
+                const t = Math.max( 0.001, this.time - time );
+                this.setSize( t, this.rightSide );
+                LX.emit("@propW_minT", t); 
+            }
+        }
+        else if(timeline.grabbing && this.visualState) {
+            this.updateCurve(); // update position of curvewidget
+        }
+
+        if ( e.type == "wheel" ){
+            this.updateCurve(true);
+        }
+
+        if( this.resizing ){
+            timeline.grabbing = false;
+            timeline.grabbingTimeBar = false;
+            timeline.grabbingScroll = false;
+            timeline.movingKeys = false;
+            timeline.timeBeforeMove = null;
+            timeline.boxSelection = false;
+            if(timeline.unHoverAll) {
+                timeline.unHoverAll();
+            }
+
+            if ( e.type == "mouseup" ){
+                this.resizing = 0;
+                this.sideMenu.root.style.pointerEvents = "";
+                this.panelCurves.root.style.pointerEvents = "";
+                this.curveWidget.root.style.pointerEvents = "";
+            }
+        }
+        
+        return true;
+    }
+
+    onDblClick( e ) {
+        if ( !this.enabler ){ return; }
+
+        const timeline = this.timeline;
+        const lpos = timeline.timeToX( this.time - this.leftSide );
+        const rpos = timeline.timeToX( this.time + this.rightSide );
+
+        if( e.localX >= lpos && e.localX <= rpos && e.localY > timeline.topMargin) {
+            timeline.grabbing = false;
+            this.setVisualState( PropagationWindow.STATE_SELECTED );
+        }
+    }
+
+    setVisualState( visualState = PropagationWindow.STATE_BASE ){
+        if ( this.visualState == visualState ){
+            return;
+        }
+
+        
+        if  ( visualState == PropagationWindow.STATE_SELECTED ){
+            this.sideMenu.root.classList.remove("hidden");
+            this.sideMenu.root.style.pointerEvents = "";
+            this.panelCurves.root.style.pointerEvents = "";
+            this.curveWidget.root.style.pointerEvents = "";
+        }else{
+            this.panelCurves.root.classList.add("hidden");
+            this.sideMenu.root.classList.add("hidden");
+            this.sideMenu.root.style.pointerEvents = "";
+            this.panelCurves.root.style.pointerEvents = "";
+            this.curveWidget.root.style.pointerEvents = "";
+        }
+        
+        if (visualState == PropagationWindow.STATE_BASE){
+            this.visualState = PropagationWindow.STATE_BASE;
+            this.curveWidget.root.remove(); // detach from timeline (if any)
+        }else{
+            const oldVisibility = this.visualState;
+            this.visualState = visualState;
+
+            if ( oldVisibility == PropagationWindow.STATE_BASE ){ // only do update on visibility change
+                const area = this.timeline.canvasArea ? this.timeline.canvasArea.root : this.timeline.canvas;
+
+                area.appendChild( this.curveWidget.root );
+                this.updateCurve(true);
+            }
+        }
+    }
+
+    updateCurve( updateSize = false ) {
+        if( !(this.enabler && this.visualState) ){ return false; }
+
+        const timeline = this.timeline;
+
+        const windowRect = this._getBoundingRectInnerWindow();
+
+		let areaRect = timeline.canvas.getBoundingClientRect();
+
+        this.curveWidget.root.style.left = areaRect.x + windowRect.rectPosX + "px";
+        this.curveWidget.root.style.top = areaRect.y + windowRect.rectPosY + windowRect.rectHeight -2 + "px";
+
+        if(updateSize) {
+            const canvas = this.curveWidget.curveInstance.canvas;
+            canvas.width = windowRect.rectWidth;
+            canvas.style.width = windowRect.rectWidth + "px";
+
+
+            const radii = timeline.trackHeight * 0.4;
+			let leftRadius = windowRect.leftSize > radii ? radii : windowRect.leftSize;
+	        leftRadius = windowRect.rectHeight > leftRadius ? leftRadius : (windowRect.rectHeight*0.5);
+        
+	        let rightRadius = windowRect.rightSize > radii ? radii : windowRect.rightSize;
+	        rightRadius = windowRect.rectHeight > rightRadius ? rightRadius : (windowRect.rectHeight*0.5);
+
+			canvas.style.borderBottomLeftRadius = leftRadius + "px";
+			canvas.style.borderBottomRightRadius = rightRadius + "px";
+
+            this.curveWidget.curveInstance.redraw();
+        }
+        
+        if ( this.visualState ){
+            this.sideMenu.root.style.left = areaRect.x + windowRect.rectPosX + windowRect.rectWidth + "px";
+            this.sideMenu.root.style.top = areaRect.y + windowRect.rectPosY + "px";
+            if ( !this.panelCurves.root.classList.contains("hidden") ){
+                this.panelCurves.root.style.left = areaRect.x + windowRect.rectPosX + windowRect.rectWidth + 50 +"px";
+                this.panelCurves.root.style.top = areaRect.y + windowRect.rectPosY + 10 + "px";       
+                this.panelCurves.root.style.maxHeight = windowRect.rectHeight - 10 + "px";       
+            }
+        }
+
+
+    }
+
+    _getBoundingRectInnerWindow(){
+        const timeline = this.timeline;
+        let rightSize = timeline.timeToX(this.rightSide) - timeline.timeToX(0); 
+        let leftSize = timeline.timeToX(this.leftSide) - timeline.timeToX(0);
+
+        let rectWidth = leftSize + rightSize;
+		let rectHeight =  timeline.leftPanel ? Math.min(
+            timeline.canvas.height - timeline.topMargin - 2 - (this.visualState ? this.curveWidget.curveInstance.canvas.clientHeight : 0), 
+            timeline.leftPanel.root.children[1].children[0].clientHeight - timeline.leftPanel.root.children[1].scrollTop + timeline.trackHeight*0.5
+        ) : timeline.canvas.height - timeline.topMargin - 2 - (this.visualState ? this.curveWidget.curveInstance.canvas.clientHeight : 0);
+        rectHeight = Math.max( rectHeight, 0 );
+
+        let rectPosX = timeline.timeToX( this.time - this.leftSide);
+        let rectPosY = timeline.topMargin + 1;
+
+        return { rightSize, leftSize, rectWidth, rectHeight, rectPosX, rectPosY };
+    }
+
+    draw( ){
+        if ( !this.enabler || this.timeline.playing ){ return; }
+
+        const timeline = this.timeline;
+        const ctx = timeline.canvas.getContext("2d");
+
+        let { rightSize, leftSize, rectWidth, rectHeight, rectPosX, rectPosY } = this._getBoundingRectInnerWindow();
+
+        // compute radii
+        let radii = this.visualState == PropagationWindow.STATE_SELECTED ? (timeline.trackHeight * 0.4) : timeline.trackHeight;
+        let leftRadii = leftSize > radii ? radii : leftSize;
+        leftRadii = rectHeight > leftRadii ? leftRadii : rectHeight;
+        
+        let rightRadii = rightSize > radii ? radii : rightSize;
+        rightRadii = rectHeight > rightRadii ? rightRadii : rectHeight;
+                
+        let radiusTL, radiusBL, radiusTR, radiusBR;
+        radiusTL = leftRadii;
+        radiusBL = this.visualState ? 0 : leftRadii;
+        radiusTR = rightRadii;
+        radiusBR = this.visualState ? 0 : rightRadii;
+
+        // draw window rect
+        if ( this.visualState && this.opacity ){
+            let gradient = ctx.createLinearGradient(rectPosX, rectPosY, rectPosX + rectWidth, rectPosY );
+            gradient.addColorStop(0, this.gradientColorLimits);
+            for( let i = 0; i < this.gradient.length; ++i){
+                const g = this.gradient[i];
+                gradient.addColorStop(g[0], this.gradientColor + "," + g[1] +")");
+            }
+            gradient.addColorStop(1,this.gradientColorLimits);
+            ctx.fillStyle = gradient;
+            ctx.globalAlpha = this.opacity;
+    
+            ctx.beginPath();
+    
+            ctx.moveTo(rectPosX, rectPosY + radiusTL);
+            ctx.quadraticCurveTo(rectPosX, rectPosY, rectPosX + radiusTL, rectPosY );
+            ctx.lineTo( rectPosX + rectWidth - radiusTR, rectPosY );
+            ctx.quadraticCurveTo(rectPosX + rectWidth, rectPosY, rectPosX + rectWidth, rectPosY + radiusTR );
+            ctx.lineTo( rectPosX + rectWidth, rectPosY + rectHeight - radiusBR );
+            ctx.quadraticCurveTo(rectPosX + rectWidth, rectPosY + rectHeight, rectPosX + rectWidth - radiusBR, rectPosY + rectHeight );
+            ctx.lineTo( rectPosX + radiusBL, rectPosY + rectHeight );
+            ctx.quadraticCurveTo(rectPosX, rectPosY + rectHeight, rectPosX, rectPosY + rectHeight - radiusBL );
+    
+            ctx.closePath();
+            ctx.fill();
+            ctx.globalAlpha = 1;
+        }
+        
+        // borders
+        ctx.strokeStyle = this.borderColor;
+
+        ctx.lineWidth = 4;
+
+        ctx.beginPath();
+        ctx.moveTo(rectPosX, rectPosY + radiusTL*0.5);
+        ctx.quadraticCurveTo(rectPosX, rectPosY, rectPosX + radiusTL*0.5, rectPosY );
+        ctx.moveTo( rectPosX + rectWidth - radiusTR*0.5, rectPosY );
+        ctx.quadraticCurveTo(rectPosX + rectWidth, rectPosY, rectPosX + rectWidth, rectPosY + radiusTR*0.5 );
+        ctx.moveTo( rectPosX + rectWidth, rectPosY + rectHeight - radiusBR*0.5 );
+        ctx.quadraticCurveTo(rectPosX + rectWidth, rectPosY + rectHeight, rectPosX + rectWidth - radiusBR*0.5, rectPosY + rectHeight );
+        ctx.moveTo( rectPosX + radiusBL*0.5, rectPosY + rectHeight );
+        ctx.quadraticCurveTo(rectPosX, rectPosY + rectHeight, rectPosX, rectPosY + rectHeight - radiusBL*0.5 );
+        ctx.stroke();
+        ctx.lineWidth = 1.5;
+
+        let lineSize = timeline.trackHeight;
+        let remaining = rectHeight - timeline.trackHeight;
+        let amount = 0;
+        if (lineSize > 0){
+            amount = Math.ceil(remaining/lineSize);
+            lineSize = remaining / amount;
+        }
+
+        let start = rectPosY + timeline.trackHeight * 0.5;
+        for( let i = 0; i < amount; ++i ){
+            ctx.moveTo(rectPosX, start + lineSize * i + lineSize*0.3);
+            ctx.lineTo(rectPosX, start + lineSize * i + lineSize*0.7);
+            ctx.moveTo(rectPosX + rectWidth, start + lineSize * i + lineSize*0.3);
+            ctx.lineTo(rectPosX + rectWidth, start + lineSize * i + lineSize*0.7);
+        }
+        ctx.stroke();
+        ctx.lineWidth = 1;
+        // end of borders
+    }
+}
+
+Math.clamp = function (v, a, b) {
+	return a > v ? a : b < v ? b : v;
+};
 
 export { VideoEditor, TimeBar }
