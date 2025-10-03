@@ -1,7 +1,7 @@
 import { Performs } from './js/Performs.js'
 import { LX } from 'lexgui'
 // import 'lexgui/extensions/videoeditor.js';
-import '/videoeditor.js'
+import './videoeditor.js'
 import * as THREE from 'three'
 import { DrawingUtils, HandLandmarker, PoseLandmarker, FilesetResolver} from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.13';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
