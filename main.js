@@ -298,13 +298,6 @@ class App {
         leftArea.attach(this.video);
         leftArea.root.style.position = "relative";
 
-        // Show mediapipe 2D landmarks in canvas 2D
-        this.videoCanvas = document.createElement('canvas');
-        this.videoCanvas.style="width:100%;position:absolute;";
-        this.videoCanvas.className="hidden";
-        this.videoCanvas.style.pointerEvents = "none";
-        leftArea.attach(this.videoCanvas);
-
         this.performs.renderer.domElement.style="width:100%;position:absolute;";
         const info = document.createElement('div');
         info.id = "select-video";
@@ -337,6 +330,7 @@ class App {
         this.videoEditor = new LX.VideoEditor(leftArea, {  video: this.video, controlsArea: bottomContainer })
         this.videoEditor.hideControls();
         this.videoEditor.onSetTime = (t) => {
+            this.window.moveWindow( t );
         }
         this.videoEditor.onChangeStart = (t) => {
             const action = this.performs.currentCharacter.mixer._actions[0];
@@ -352,6 +346,17 @@ class App {
 
             this.updateTrajectories( );
         }
+
+        this.window = new Window( this.videoEditor.timebar, { start: 0, end: 1, resizingLeft: true, resizingRight: true} );
+        this.videoEditor.timebar.onMouse = ( e ) => this.window.onMouse( e );
+        this.videoEditor.timebar.onDraw = () => this.window.draw();
+
+         // Show mediapipe 2D landmarks in canvas 2D
+        this.videoCanvas = document.createElement('canvas');
+        this.videoCanvas.style="position:absolute;";
+        this.videoCanvas.className="hidden";
+        this.videoCanvas.style.pointerEvents = "none";
+        leftArea.attach(this.videoCanvas);
     }
 
     computeTrajectories( animation ) {
@@ -492,6 +497,9 @@ class App {
     updateTrajectories() {
         const mixer = this.performs.currentCharacter.mixer;
         const action = mixer._actions[0];
+        if( !action ) {
+            return;
+        }
         // Get current frame index
         const currentFrame = getFrameIndex(action);
 
@@ -622,12 +630,14 @@ class App {
 
         this.video.onloadedmetadata = async (e) => {
 
-            this.videoCanvas.width =  this.video.videoWidth;
-            this.videoCanvas.height = this.video.videoHeight;
             this.video.currentTime = 0.0;
             this.video.loop = this.loop;
-            this.videoCanvas.classList.remove("hidden");
             this.video.classList.remove("hidden");
+            // const videoAspect =  this.video.clientHeight / this.video.videoHeight;
+            const videoAspect = this.video.videoHeight/this.video.videoWidth;
+            this.videoCanvas.height = this.video.clientHeight;
+            this.videoCanvas.width =  this.video.videoWidth*videoAspect;
+            this.videoCanvas.classList.remove("hidden");
 
             // Hide info
             document.getElementById("select-video").classList.add("hidden");
@@ -694,7 +704,7 @@ class App {
                 }
             }
             this.videoEditor.showControls();
-            this.videoEditor._loadVideo({controls: true});
+            this.videoEditor.loadVideo({controls: true});
             requestAnimationFrame(this.animate.bind(this));
         }
 
@@ -725,6 +735,9 @@ class App {
 
         this.video.ontimeupdate = (e) => {
             const mixer = this.performs.currentCharacter.mixer;
+            if( !mixer._actions.length ) {
+                return;
+            }
             const animDuration = mixer._actions[0]._clip.duration;
             if( this.video.paused ) {
                 mixer.timeScale = 1;
@@ -2054,4 +2067,151 @@ class MagicLineGeometry extends LineGeometry {
 }
 const app = new App();
 
+class Window {
+    constructor( timeline, options = {} ) {
+        this.timeline = timeline;
+        this.timeline.padding = 0;
+
+        this.start = options.start != undefined ? options.start : 0.0; // sec
+        this.end = options.end || 3.0;   // sec
+        this.center = options.center != undefined ? options.center : this.start
+
+        this.canvas = this.timeline.canvas;
+        this.windowHeight = options.windowHeight || this.canvas.height - 15;
+        this.handleWidth = options.handleWidth || 6;
+        
+        this.allowDragging = options.dragging ?? false;
+        this.dragging = false;
+        this.dragOffset = 0;
+        this.resizingLeft = false;
+        this.resizingRight = false;
+    }
+
+    draw() {
+        const ctx = this.canvas.getContext('2d');
+        let startX = Math.max( this.timeline.startX, this.timeline.timeToX(this.start) );
+        let endX = Math.min( this.timeline.endX, this.timeline.timeToX(this.end) );
+        const width = endX - startX;
+
+        // Window background
+        ctx.fillStyle = "rgba(200, 200, 255, 0.15)";
+        ctx.roundRect(startX , this.canvas.height / 2 - this.windowHeight / 2, width, this.windowHeight, 5);
+        ctx.fill();
+        // Border
+        ctx.strokeStyle = "rgba(200, 200, 255, 0.5)";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.roundRect(startX, this.canvas.height / 2 - this.windowHeight / 2, width, this.windowHeight, 5);
+        ctx.stroke();
+
+        // Handlers
+        const offsetW = 2;
+        const offsetH = 8;
+        if( startX > this.timeline.startX ) {
+        ctx.fillStyle = "whitesmoke"//"#579aff";
+        ctx.fillRect(startX, this.canvas.height / 2 - this.windowHeight / 2, this.handleWidth, this.windowHeight);
+        ctx.fillStyle = "#579aff";
+        ctx.fillRect(startX + this.handleWidth/2 - offsetW/2, this.canvas.height / 2 - this.windowHeight / 2 + offsetH / 2 , offsetW, this.windowHeight - offsetH);
+        }
+        if( endX < this.timeline.endX ) {
+        ctx.fillStyle = "whitesmoke"//"#579aff";
+        ctx.fillRect(endX - this.handleWidth, this.canvas.height / 2 - this.windowHeight / 2, this.handleWidth, this.windowHeight);
+        ctx.fillStyle = "#579aff";   
+        ctx.fillRect(endX - this.handleWidth/2 - offsetW/2, this.canvas.height / 2 - this.windowHeight / 2 + offsetH / 2, offsetW, this.windowHeight - offsetH);       
+        }
+    }
+
+    onMouse( e ) {
+        switch(e.type) {
+            case "mousedown":
+                this.onMouseDown( e );
+                break;
+            case "mousemove":
+                this.onMouseMove( e );
+                break;
+            case "mouseup":
+                this.onMouseUp( e );
+                break;
+        }
+    }
+
+    onMouseDown( e ) {
+        const x = e.offsetX;
+        const startX = this.timeline.timeToX(this.start);
+        const endX = this.timeline.timeToX(this.end);
+
+        if( x >= startX && x <= startX + this.handleWidth ) {
+            this.resizingLeft = true;
+            e.cancelBubble = true;
+        }
+        else if( x >= endX - this.handleWidth && x <= endX ) {
+            this.resizingRight = true;
+            e.cancelBubble = true;
+        }
+        else if( this.allowDragging &&  x >= startX && x <= endX ) {
+            this.dragging = true;
+            this.dragOffset = x - startX;
+            e.cancelBubble = true;
+        }
+    }
+
+    onMouseMove( e ) {
+        const x = e.offsetX;
+        let startX = this.timeline.timeToX(this.start);
+        let endX = this.timeline.timeToX(this.end);
+        const centerX = this.timeline.timeToX(this.center);
+        if( this.resizingLeft ) {
+            startX = Math.min( centerX, Math.max( this.timeline.startX, x ) );//Math.max(startX - 0.1, (x - this.timeline.padding) / (this.canvas.width - 2 * this.timeline.padding) * this.timeline.endX);
+            this.start = this.timeline.xToTime( startX );
+        }
+        else if( this.resizingRight ) {
+            endX = Math.max( centerX, Math.min( this.timeline.endX, x ) ); //Math.min(endX + 0.1, (x - this.timeline.padding) / (this.canvas.width - 2 * this.timeline.padding) * this.timeline.endX);
+            this.end = this.timeline.xToTime( endX );
+        }
+        else if( this.dragging ) {
+        const time = this.timeline.xToTime( x - this.dragOffset );
+        this.moveWindow( time )
+        }
+        else {
+            const x = e.offsetX;
+            const startX = this.timeline.timeToX(this.start);
+            const endX = this.timeline.timeToX(this.end);
+
+            if( x >= startX && x <= startX + this.handleWidth ) {
+                this.canvas.style.cursor = "col-resize";
+                e.cancelBubble = true;
+            }
+            else if( x >= endX - this.handleWidth && x <= endX ) {
+                this.canvas.style.cursor = "col-resize";
+                e.cancelBubble = true;
+            }
+            return;
+        }
+        e.cancelBubble = true;
+        this.timeline._draw();
+    }
+
+    onMouseUp( e ) {
+        this.dragging = false;
+        this.resizingLeft = false;
+        this.resizingRight = false;
+    }
+
+    moveWindow( time ) {
+
+        const leftOffset = this.start - this.center;
+        const rightOffset = this.end - this.center;
+
+        // const startX = this.timeline.timeToX( time + leftOffset );
+        // const endX = this.timeline.timeToX( rightOffset );
+
+        // const windowLength = this.end - this.start;
+        
+        // newStart = Math.max(0, Math.min(this.timeline.endX - windowLength, startX));
+        this.start = time + leftOffset;
+        this.end = time + rightOffset;
+        this.center = time;
+    }
+
+}
 window.global = {app};
