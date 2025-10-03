@@ -331,27 +331,43 @@ class App {
         this.videoEditor.hideControls();
         this.videoEditor.onSetTime = (t) => {
             this.window.moveWindow( t );
+            this.updateTrajectories( );
         }
         this.videoEditor.onChangeStart = (t) => {
-            const action = this.performs.currentCharacter.mixer._actions[0];
-            const frame = getFrameIndex(action, t);
-            this.trajectoryStart = frame;
+            // const action = this.performs.currentCharacter.mixer._actions[0];
+            // const frame = getFrameIndex(action, t);
+            // this.trajectoryStart = frame;
 
-            this.updateTrajectories( );
+            // this.updateTrajectories( );
         }
         this.videoEditor.onChangeEnd = (t) => {
-            const action = this.performs.currentCharacter.mixer._actions[0];
-            const frame = getFrameIndex(action, t);
-            this.trajectoryEnd = frame;
+            // const action = this.performs.currentCharacter.mixer._actions[0];
+            // const frame = getFrameIndex(action, t);
+            // this.trajectoryEnd = frame;
 
-            this.updateTrajectories( );
+            // this.updateTrajectories( );
         }
 
         this.window = new Window( this.videoEditor.timebar, { start: 0, end: 1, resizingLeft: true, resizingRight: true} );
         this.videoEditor.timebar.onMouse = ( e ) => this.window.onMouse( e );
         this.videoEditor.timebar.onDraw = () => this.window.draw();
+        this.window.onChangeStart = ( startTime ) => {
+            this.updateTrajectories();
+        }
+        this.window.onChangeEnd = ( endTime ) => {
+            this.updateTrajectories();
+        }
+        this.window.onHover = ( e ) => {
+            const x = e.target.offsetLeft + e.offsetX;
+            const y = e.target.offsetTop - 70;
+            if( !this.popup ) {
+                this.popup = LX.popup("Time window to adjust trajectory frames shown.", null, { position: [x, y] });
+            }
+        }
 
-         // Show mediapipe 2D landmarks in canvas 2D
+        this.updateTrajectories();
+        
+        // Show mediapipe 2D landmarks in canvas 2D
         this.videoCanvas = document.createElement('canvas');
         this.videoCanvas.style="position:absolute;";
         this.videoCanvas.className="hidden";
@@ -500,38 +516,46 @@ class App {
         if( !action ) {
             return;
         }
-        // Get current frame index
-        const currentFrame = getFrameIndex(action);
 
-        // Number of frames before and after the current time given a window
-        const offset = Math.ceil(this.trajectoryWindow/2);
-        const startFrame = Math.max(this.trajectoryStart, currentFrame - offset); // First frame inside the window
-        const endFrame = Math.min(currentFrame + offset, this.trajectoryEnd); // Last frame inside the window
-
+        // Get start frame index
+        const startFrame = getFrameIndex(action, this.window.start);
+        this.trajectoryStart = startFrame;
+        
+        // Get end frame index
+        const endFrame = getFrameIndex(action, this.window.end);
+        this.trajectoryEnd = endFrame;
+   
         // Update material alpha for each trajectory (line and arrows)
-        for(let trajectory in this.trajectories) {
+        for( let trajectory in this.trajectories ) {
             const positions = this.trajectories[trajectory].positions;
             let colors = this.trajectories[trajectory].colors;
 
             const line = this.trajectories[trajectory].getObjectByName("line");
-            const totalFrames = positions.length/3;
+            const totalFrames = positions.length / 3;
+
             for(let frame = 0; frame < totalFrames; frame++) {
                 const arrow = this.trajectories[trajectory].getObjectByName(frame);
                 let alpha = 0;
-                if(frame < startFrame) {
+                if( frame < startFrame ) {
                     alpha = (frame - startFrame)/10;
                 }
-                else if(frame > endFrame) {
+                else if( frame > endFrame ) {
                     alpha = (endFrame - frame)/10;
                 }
                 const opacity = Math.max(0,Math.min(1,0.8 + alpha));
                 colors[frame*8+3] = opacity;
                 colors[frame*8+7] = opacity;
+
                 arrow.children[0].material.opacity = opacity;
+                if( opacity == 0 ) {
+                    arrow.visible = false;
+                }
+                else {
+                    arrow.visible = true;
+                }
             }
             line.geometry.setColors(colors);
         }
-
     }
 
     showTrajectoriesDialog() {
@@ -539,16 +563,6 @@ class App {
         const dialog = new LX.Dialog("Trajectories", (p) => {
             let leftValue = true;
             let rightValue = true;
-
-            // p.addRange("Trim (frames to show)", [this.trajectoryStart, this.trajectoryEnd], (v) => {
-            //     this.trajectoryStart = v[0];
-            //     this.trajectoryEnd = v[1];
-            //     this.updateTrajectories( this.trajectoryStart, this.trajectoryEnd);
-            // }, {min: 0, max: this.trajectories["LeftHand"].children.length, step: 1});
-
-            p.addNumber("Window width (frames to show)", this.trajectoryWindow, (v) => {
-                this.trajectoryWindow = v;
-            }, {min: 0, max: Math.ceil(this.trajectories["LeftHand"].children.length - 1), step: 1});
 
             const leftTrajectories = {};
             const rightTrajectories = {};
@@ -618,8 +632,6 @@ class App {
         }, {size:["50%", "auto"], draggable: true, })
     }
 
-   
-
     async loadVideo( signName ) {
 
         const landmarksDataUrl = 'https://catsl.eelvex.net/static/vid_data/teacher-' + signName + '/teacher-' + signName + '_keyframe_1.json';
@@ -635,8 +647,9 @@ class App {
             this.video.classList.remove("hidden");
             // const videoAspect =  this.video.clientHeight / this.video.videoHeight;
             const videoAspect = this.video.videoHeight/this.video.videoWidth;
+            const offset = this.video.clientHeight/ this.video.videoHeight;
             this.videoCanvas.height = this.video.clientHeight;
-            this.videoCanvas.width =  this.video.videoWidth*videoAspect;
+            this.videoCanvas.width =  this.video.videoWidth*offset;
             this.videoCanvas.classList.remove("hidden");
 
             // Hide info
@@ -2110,13 +2123,13 @@ class Window {
         if( startX > this.timeline.startX ) {
         ctx.fillStyle = "whitesmoke"//"#579aff";
         ctx.fillRect(startX, this.canvas.height / 2 - this.windowHeight / 2, this.handleWidth, this.windowHeight);
-        ctx.fillStyle = "#579aff";
+        ctx.fillStyle = "#0967f4ff";
         ctx.fillRect(startX + this.handleWidth/2 - offsetW/2, this.canvas.height / 2 - this.windowHeight / 2 + offsetH / 2 , offsetW, this.windowHeight - offsetH);
         }
         if( endX < this.timeline.endX ) {
         ctx.fillStyle = "whitesmoke"//"#579aff";
         ctx.fillRect(endX - this.handleWidth, this.canvas.height / 2 - this.windowHeight / 2, this.handleWidth, this.windowHeight);
-        ctx.fillStyle = "#579aff";   
+        ctx.fillStyle = "#0967f4ff";   
         ctx.fillRect(endX - this.handleWidth/2 - offsetW/2, this.canvas.height / 2 - this.windowHeight / 2 + offsetH / 2, offsetW, this.windowHeight - offsetH);       
         }
     }
@@ -2163,14 +2176,20 @@ class Window {
         if( this.resizingLeft ) {
             startX = Math.min( centerX, Math.max( this.timeline.startX, x ) );//Math.max(startX - 0.1, (x - this.timeline.padding) / (this.canvas.width - 2 * this.timeline.padding) * this.timeline.endX);
             this.start = this.timeline.xToTime( startX );
+            if( this.onChangeStart ) {
+                this.onChangeStart( this.start );
+            }
         }
         else if( this.resizingRight ) {
             endX = Math.max( centerX, Math.min( this.timeline.endX, x ) ); //Math.min(endX + 0.1, (x - this.timeline.padding) / (this.canvas.width - 2 * this.timeline.padding) * this.timeline.endX);
             this.end = this.timeline.xToTime( endX );
+            if( this.onChangeEnd ) {
+                this.onChangeEnd( this.end );
+            }
         }
         else if( this.dragging ) {
-        const time = this.timeline.xToTime( x - this.dragOffset );
-        this.moveWindow( time )
+            const time = this.timeline.xToTime( x - this.dragOffset );
+            this.moveWindow( time )
         }
         else {
             const x = e.offsetX;
@@ -2180,10 +2199,16 @@ class Window {
             if( x >= startX && x <= startX + this.handleWidth ) {
                 this.canvas.style.cursor = "col-resize";
                 e.cancelBubble = true;
+                if( !this.resizingLeft && this.onHover ) {
+                    this.onHover( e );
+                }
             }
             else if( x >= endX - this.handleWidth && x <= endX ) {
                 this.canvas.style.cursor = "col-resize";
                 e.cancelBubble = true;
+                if( !this.resizingRight && this.onHover ) {
+                    this.onHover( e );
+                }
             }
             return;
         }
