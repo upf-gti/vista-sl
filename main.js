@@ -7,13 +7,8 @@ import { DrawingUtils, HandLandmarker, PoseLandmarker, FilesetResolver} from 'ht
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { Line2 } from 'three/addons/lines/Line2.js';
-let runningMode = "IMAGE";
-// let handLandmarker = null;
 
-// const performs = new Performs();
-// performs.init({srcReferencePose: 2, trgReferencePose: 2, restrictView: false});
-// performs.changeMode(Performs.Modes.KEYFRAME);
-// window.global = {app: performs};
+let runningMode = "IMAGE";
 
 const avatars = {
     "EvaLow": [Performs.AVATARS_URL+'Eva_Low/Eva_Low.glb', Performs.AVATARS_URL+'Eva_Low/Eva_Low.json', 0, Performs.AVATARS_URL+'Eva_Low/Eva_Low.png'],
@@ -31,7 +26,7 @@ class App {
         this.animationMap = null;
         this.characters = avatars;
         this.speed = 1;
-        this.loop = false;
+        
         this.selectedVideo = null;
 
         this.startTimeString = 0;
@@ -146,10 +141,43 @@ class App {
 
     async createGUI() {
         const mainArea = await LX.init({});
-        const [menubar, containerArea] = mainArea.split({type: "vertical", sizes: ["240px", "auto"]});
+        let menubar = null;
+
+        const localHost = window.location.protocol !== "https:";
+        const starterTheme = LX.getTheme();
+        const menubarButtons = [
+            {
+                title: "Change Theme",
+                icon: starterTheme == "dark" ? "Moon" : "Sun",
+                swap: starterTheme == "dark" ? "Sun" : "Moon",
+                callback:  (value, event) => { 
+                    LX.switchTheme();
+                    if( value == "dark" ) {
+                        this.window.backgroundColor = "rgba(200, 200, 255, 0.15)";
+                        this.window.handlerColor = "whitesmoke";
+                    }
+                    else {
+                        this.window.backgroundColor = "rgba(200, 200, 255, 0.52)";
+                        this.window.handlerColor = "#3e4360ff";
+                    }
+                    this.videoEditor.timebar._draw(); }
+            },
+            {
+                title: "Switch Spacing",
+                icon: "AlignVerticalSpaceAround",
+                callback:  (value, event) => { LX.switchSpacing() }
+            }
+        ];
+
+        menubar = mainArea.addMenubar();
+        menubar.addButtons( menubarButtons );
+        menubar.setButtonImage("Vista-SL", 'https://avatars.slack-edge.com/2025-04-17/8790996987232_b71f912cab2b8dbb26e6_88.jpg', () => {window.open("http://xanthippi.ceid.upatras.gr/VistaSL/EN/VistaSL.html")}, {float: "left"})
+        menubar.setButtonIcon("Github", "Github", () => { window.open("https://github.com/upf-gti/vista-sl/") });
+        
+        const [panels, containerArea] = mainArea.split({type: "vertical", sizes: ["240px", "auto"]});
         const [topContainer, bottomContainer] = containerArea.split({type: "vertical", sizes: ["80%", "auto"]});
         const [leftArea, rightArea] = topContainer.split({sizes: ["50%", "auto"]});
-        const [videoMenu, sceneMenu] = menubar.split({sizes: ["50%", "auto"]});
+        const [videoMenu, sceneMenu] = panels.split({sizes: ["50%", "auto"]});
         const videoPanel = videoMenu.addPanel( {className: "m-6", width: "calc(100% - 3rem)"});
         const scenePanel = sceneMenu.addPanel( {className: "m-6", width: "calc(100% - 3rem)"});
 
@@ -191,25 +219,6 @@ class App {
                 }
             }, { filter: true, overflowContainerY: containerArea.root, width: "40%"});
 
-            videoPanel.addNumber("Speed", this.speed, (v) => {
-                this.speed = v;
-                this.video.playbackRate = v;
-                const mixer = this.performs.currentCharacter.mixer;
-                const animDuration = mixer._actions[0]._clip.duration;
-
-                if( this.video.currentTime < animDuration ) {
-                    mixer.timeScale = v;
-                }
-                
-            }, {min: 0, max: 2, step: 0.01, width: "40%" });
-
-            videoPanel.addToggle("Loop", this.loop, (v) => {
-                this.loop = v;
-                this.videoEditor.loop = v;
-                // if(this.video) {
-                //     this.video.loop = v;
-                // }
-            });
             videoPanel.endLine();
 
             videoPanel.addColor("Reference 2D landmarks", this.referenceColor, (v) => {
@@ -250,7 +259,6 @@ class App {
                     const track = animation.mixerBodyAnimation.tracks[0];
                     this.trajectoryEnd = track.times.length;
                     this.computeTrajectories(animation);
-
 
                     $('#loading').fadeOut(); //hide();
                 }, (err) => {
@@ -346,6 +354,17 @@ class App {
             // this.trajectoryEnd = frame;
 
             // this.updateTrajectories( );
+        }
+
+        this.videoEditor.onChangeSpeed = (v) => {
+                this.speed = v;
+                const mixer = this.performs.currentCharacter.mixer;
+                const animDuration = mixer._actions[0]._clip.duration;
+
+                if( this.video.currentTime < animDuration ) {
+                    mixer.timeScale = v;
+                }
+                
         }
 
         this.window = new Window( this.videoEditor.timebar, { start: 0, end: 1, resizingLeft: true, resizingRight: true} );
@@ -634,6 +653,8 @@ class App {
 
     async loadVideo( signName ) {
 
+        $('#loading')[0].children[0].innerText = "Loading video..."
+        $('#loading').fadeIn();
         const landmarksDataUrl = 'https://catsl.eelvex.net/static/vid_data/teacher-' + signName + '/teacher-' + signName + '_keyframe_1.json';
         this.video.src = `https://catsl.eelvex.net/static/vid/teacher-${signName}.mp4`;
 
@@ -643,7 +664,7 @@ class App {
         this.video.onloadedmetadata = async (e) => {
 
             this.video.currentTime = 0.0;
-            this.video.loop = this.loop;
+            this.video.loop = this.videoEditor.loop;
             this.video.classList.remove("hidden");
             // const videoAspect =  this.video.clientHeight / this.video.videoHeight;
             const videoAspect = this.video.videoHeight/this.video.videoWidth;
@@ -651,6 +672,9 @@ class App {
             this.videoCanvas.height = this.video.clientHeight;
             this.videoCanvas.width =  this.video.videoWidth*offset;
             this.videoCanvas.classList.remove("hidden");
+
+            $('#loading').fadeOut();
+            $('#loading')[0].children[0].innerText = "Loading character..."
 
             // Hide info
             document.getElementById("select-video").classList.add("hidden");
@@ -734,7 +758,7 @@ class App {
             const mixer = this.performs.currentCharacter.mixer;
             this.performs.keyframeApp.changePlayState(!this.video.paused);
 
-            if(this.video.currentTime >= this.videoEditor.endTime && this.loop) {
+            if(this.video.currentTime >= this.videoEditor.endTime && this.videoEditor.loop) {
                 // this.video.currentTime = this.videoEditor.startTime;
                 // this.video.play();
                 this.performs.keyframeApp.changePlayState(!this.video.paused);
@@ -773,7 +797,7 @@ class App {
             const mixer = this.performs.currentCharacter.mixer;
             mixer.setTime(this.videoEditor.startTime);
             this.performs.keyframeApp.changePlayState(false);
-            if( this.loop ) {
+            if( this.videoEditor.loop ) {
                 this.video.pause();
                 this.video.currentTime = this.videoEditor.startTime;
                 this.video.play();
@@ -2098,6 +2122,9 @@ class Window {
         this.dragOffset = 0;
         this.resizingLeft = false;
         this.resizingRight = false;
+
+        this.backgroundColor = options.backgroundColor || "rgba(200, 200, 255, 0.15)";
+        this.handlerColor = options.handlerColor || "whitesmoke";
     }
 
     draw() {
@@ -2107,30 +2134,30 @@ class Window {
         const width = endX - startX;
 
         // Window background
-        ctx.fillStyle = "rgba(200, 200, 255, 0.15)";
-        ctx.roundRect(startX , this.canvas.height / 2 - this.windowHeight / 2, width, this.windowHeight, 5);
+        ctx.fillStyle = this.backgroundColor;
+        ctx.roundRect(startX - 2, this.canvas.height / 2 - this.windowHeight / 2, width, this.windowHeight, 5);
         ctx.fill();
         // Border
         ctx.strokeStyle = "rgba(200, 200, 255, 0.5)";
         ctx.lineWidth = 1;
         ctx.beginPath();
-        ctx.roundRect(startX, this.canvas.height / 2 - this.windowHeight / 2, width, this.windowHeight, 5);
+        ctx.roundRect(startX - 2, this.canvas.height / 2 - this.windowHeight / 2, width, this.windowHeight, 5);
         ctx.stroke();
 
         // Handlers
         const offsetW = 2;
         const offsetH = 8;
         if( startX > this.timeline.startX ) {
-        ctx.fillStyle = "whitesmoke"//"#579aff";
-        ctx.fillRect(startX, this.canvas.height / 2 - this.windowHeight / 2, this.handleWidth, this.windowHeight);
-        ctx.fillStyle = "#0967f4ff";
-        ctx.fillRect(startX + this.handleWidth/2 - offsetW/2, this.canvas.height / 2 - this.windowHeight / 2 + offsetH / 2 , offsetW, this.windowHeight - offsetH);
+            ctx.fillStyle = this.handlerColor;//"#579aff";
+            ctx.fillRect(startX - 2, this.canvas.height / 2 - this.windowHeight / 2, this.handleWidth, this.windowHeight);
+            ctx.fillStyle = "#579aff";
+            ctx.fillRect(startX + this.handleWidth / 2 - offsetW  /2 - 2, this.canvas.height / 2 - this.windowHeight / 2 + offsetH / 2 , offsetW, this.windowHeight - offsetH);
         }
         if( endX < this.timeline.endX ) {
-        ctx.fillStyle = "whitesmoke"//"#579aff";
-        ctx.fillRect(endX - this.handleWidth, this.canvas.height / 2 - this.windowHeight / 2, this.handleWidth, this.windowHeight);
-        ctx.fillStyle = "#0967f4ff";   
-        ctx.fillRect(endX - this.handleWidth/2 - offsetW/2, this.canvas.height / 2 - this.windowHeight / 2 + offsetH / 2, offsetW, this.windowHeight - offsetH);       
+            ctx.fillStyle = this.handlerColor; //"#579aff";
+            ctx.fillRect(endX - this.handleWidth + 2, this.canvas.height / 2 - this.windowHeight / 2, this.handleWidth, this.windowHeight);
+            ctx.fillStyle = "#579aff";   
+            ctx.fillRect(endX - this.handleWidth / 2 - offsetW / 2 + 2, this.canvas.height / 2 - this.windowHeight / 2 + offsetH / 2, offsetW, this.windowHeight - offsetH);       
         }
     }
 
