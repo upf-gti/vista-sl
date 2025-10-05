@@ -170,8 +170,16 @@ class App {
         ];
 
         menubar = mainArea.addMenubar();
+        // menubar = mainArea.addMenubar(
+        // [
+        //     { name: "Avatar", submenu: [
+        //         { name: "Apply mediapipe", checked: true, icon: "" },
+        //         { name: "", icon: "Settings2" },
+        //     ] },
+        // ]
+        // );
         menubar.addButtons( menubarButtons );
-        menubar.setButtonImage("Vista-SL", 'https://avatars.slack-edge.com/2025-04-17/8790996987232_b71f912cab2b8dbb26e6_88.jpg', () => {window.open("http://xanthippi.ceid.upatras.gr/VistaSL/EN/VistaSL.html")}, {float: "left"})
+        menubar.setButtonImage("Vista-SL", '/imgs/vistasl.png', () => {window.open("http://xanthippi.ceid.upatras.gr/VistaSL/EN/VistaSL.html")}, {float: "left"})
         menubar.setButtonIcon("Github", "Github", () => { window.open("https://github.com/upf-gti/vista-sl/") });
         
         const [panels, containerArea] = mainArea.split({type: "vertical", sizes: ["240px", "auto"]});
@@ -653,7 +661,7 @@ class App {
 
     async loadVideo( signName ) {
 
-        $('#loading')[0].children[0].innerText = "Loading video..."
+        $('#text').innerText = "Loading video..."
         $('#loading').fadeIn();
         const landmarksDataUrl = 'https://catsl.eelvex.net/static/vid_data/teacher-' + signName + '/teacher-' + signName + '_keyframe_1.json';
         this.video.src = `https://catsl.eelvex.net/static/vid/teacher-${signName}.mp4`;
@@ -674,7 +682,7 @@ class App {
             this.videoCanvas.classList.remove("hidden");
 
             $('#loading').fadeOut();
-            $('#loading')[0].children[0].innerText = "Loading character..."
+            $('#text').innerText = "Loading character..."
 
             // Hide info
             document.getElementById("select-video").classList.add("hidden");
