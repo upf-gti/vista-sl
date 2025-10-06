@@ -93,7 +93,7 @@ class App {
         
         this.assetData = [];
         for(let name in this.animationsMap) {
-           this.assetData.push( { id: name, type: "video", path: "teacher-video-Ψ.mp4" }); //`https://catsl.eelvex.net/static/vid/teacher-${name}.mp4`
+           this.assetData.push( { id: name, type: "video", path: `https://catsl.eelvex.net/static/vid/teacher-${name}.mp4` }); //`https://catsl.eelvex.net/static/vid/teacher-${name}.mp4` //"teacher-video-Ψ.mp4"
         }
 
         this.trajectoriesHelper = new TrajectoriesHelper(  this.performs.currentCharacter.model,  this.performs.currentCharacter.mixer );
@@ -499,7 +499,7 @@ class App {
         $('#text').innerText = "Loading video..."
         $('#loading').fadeIn();
         const landmarksDataUrl = 'https://catsl.eelvex.net/static/vid_data/teacher-' + signName + '/teacher-' + signName + '_keyframe_1.json';
-        this.video.src = "teacher-video-Ψ.mp4";//`https://catsl.eelvex.net/static/vid/teacher-${signName}.mp4`;
+        this.video.src = `https://catsl.eelvex.net/static/vid/teacher-${signName}.mp4`; // "teacher-video-Ψ.mp4";
 
         const canvasCtx = this.characterCanvas.getContext('2d');
         canvasCtx.clearRect(0, 0, this.characterCanvas.width, this.characterCanvas.height);
