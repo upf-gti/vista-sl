@@ -186,7 +186,7 @@ class App {
         // ]
         // );
         menubar.addButtons( menubarButtons );
-        menubar.setButtonImage("Vista-SL", '/imgs/vistasl.png', () => {window.open("http://xanthippi.ceid.upatras.gr/VistaSL/EN/VistaSL.html")}, {float: "left"})
+        menubar.setButtonImage("Vista-SL", './imgs/vistasl.png', () => {window.open("http://xanthippi.ceid.upatras.gr/VistaSL/EN/VistaSL.html")}, {float: "left"})
         menubar.setButtonIcon("Github", "Github", () => { window.open("https://github.com/upf-gti/vista-sl/") });
         
         // const videoDialog = new LX.Dialog("Title", p => {
