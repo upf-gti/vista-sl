@@ -1,8 +1,30 @@
 {
-    "video-Χίλια": "https://signon-lfs.gti.upf.edu/files/evalls/animics/clips/GSL-Thousand.bvhe",
-    "video-Χωρίζω": "https://signon-lfs.gti.upf.edu/files/evalls/animics/clips/GSL-Divide.bvhe",
-    "video-Ω": "https://signon-lfs.gti.upf.edu/files/evalls/animics/clips/GSL-Omega.bvhe",
-    "video-Ψ": "https://signon-lfs.gti.upf.edu/files/evalls/animics/clips/GSL-Psi.bvhe",
-    "video-H": "https://signon-lfs.gti.upf.edu/files/evalls/animics/clips/GSL-H.bvhe",
-    "video-N": "https://signon-lfs.gti.upf.edu/files/evalls/animics/clips/video-N.bvhe"
+     "data": [
+
+        {"id": "Alphabet", "type": "folder", "children": [
+            { "id":"video-Ω", "src": "https://catsl.eelvex.net/static/vid/teacher-video-Ω.mp4","animation": "https://signon-lfs.gti.upf.edu/files/evalls/animics/clips/GSL-Omega.bvhe", "type": "video" },
+            { "id":"video-Ψ", "src": "https://catsl.eelvex.net/static/vid/teacher-video-Ψ.mp4","animation": "https://signon-lfs.gti.upf.edu/files/evalls/animics/clips/GSL-Psi.bvhe", "type": "video" },
+            { "id":"video-H", "src": "https://catsl.eelvex.net/static/vid/teacher-video-H.mp4","animation": "https://signon-lfs.gti.upf.edu/files/evalls/animics/clips/GSL-H.bvhe", "type": "video" },
+            { "id":"video-N", "src": "https://catsl.eelvex.net/static/vid/teacher-video-N.mp4","animation": "https://signon-lfs.gti.upf.edu/files/evalls/animics/clips/video-N.bvhe", "type": "video" }
+        ]},
+        {"id": "Family", "type": "folder", "children": [
+            { "id": "video-Χίλια", "src": "https://catsl.eelvex.net/static/vid/teacher-video-Χίλια.mp4", "animation": "https://signon-lfs.gti.upf.edu/files/evalls/animics/clips/GSL-Thousand.bvhe", "type": "video" },
+            { "id": "video-Χωρίζω", "src": "https://catsl.eelvex.net/static/vid/teacher-video-Χωρίζω.mp4", "animation": "https://signon-lfs.gti.upf.edu/files/evalls/animics/clips/GSL-Divide.bvhe", "type": "video" }
+        ]},
+        {"id": "Numbers", "type": "folder", "children": [
+
+        ]},
+        {"id": "Seasons/time", "type": "folder", "children": [
+
+        ]},
+        {"id": "Time", "type": "folder", "children": [
+
+        ]},
+        {"id": "Year", "type": "folder", "children": [
+
+        ]},
+        {"id": "Time/Phrases", "type": "folder", "children": [
+
+        ]}
+    ]
 }

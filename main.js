@@ -11,14 +11,23 @@ import { TrajectoriesHelper } from './js/trajectoriesHelper.js'
 
 let runningMode = "IMAGE";
 
-const avatars = {
-    "EvaLow": [Performs.AVATARS_URL+'Eva_Low/Eva_Low.glb', Performs.AVATARS_URL+'Eva_Low/Eva_Low.json', 0, Performs.AVATARS_URL+'Eva_Low/Eva_Low.png'],
-    "Witch": [Performs.AVATARS_URL+'Eva_Witch/Eva_Witch.glb', Performs.AVATARS_URL+'Eva_Witch/Eva_Witch.json', 0, Performs.AVATARS_URL+'Eva_Witch/Eva_Witch.png'],
-    "Kevin": [Performs.AVATARS_URL+'Kevin/Kevin.glb', Performs.AVATARS_URL+'Kevin/Kevin.json', 0, Performs.AVATARS_URL+'Kevin/Kevin.png'],
-    "Ada": [Performs.AVATARS_URL+'Ada/Ada.glb', Performs.AVATARS_URL+'Ada/Ada.json',0, Performs.AVATARS_URL+'Ada/Ada.png'],
-    "Eva": ['https://models.readyplayer.me/66e30a18eca8fb70dcadde68.glb', Performs.AVATARS_URL+'ReadyEva/ReadyEva_v3.json',0, 'https://models.readyplayer.me/66e30a18eca8fb70dcadde68.png?background=68,68,68'],
-    "Victor": ['https://models.readyplayer.me/66e2fb40222bef18d117faa7.glb', Performs.AVATARS_URL+'ReadyVictor/ReadyVictor.json',0, 'https://models.readyplayer.me/66e2fb40222bef18d117faa7.png?background=68,68,68']
-}
+// const avatars = {
+//     "EvaLow": [Performs.AVATARS_URL+'Eva_Low/Eva_Low.glb', Performs.AVATARS_URL+'Eva_Low/Eva_Low.json', 0, Performs.AVATARS_URL+'Eva_Low/Eva_Low.png'],
+//     "Witch": [Performs.AVATARS_URL+'Eva_Witch/Eva_Witch.glb', Performs.AVATARS_URL+'Eva_Witch/Eva_Witch.json', 0, Performs.AVATARS_URL+'Eva_Witch/Eva_Witch.png'],
+//     "Kevin": [Performs.AVATARS_URL+'Kevin/Kevin.glb', Performs.AVATARS_URL+'Kevin/Kevin.json', 0, Performs.AVATARS_URL+'Kevin/Kevin.png'],
+//     "Ada": [Performs.AVATARS_URL+'Ada/Ada.glb', Performs.AVATARS_URL+'Ada/Ada.json',0, Performs.AVATARS_URL+'Ada/Ada.png'],
+//     "Eva": ['https://models.readyplayer.me/66e30a18eca8fb70dcadde68.glb', Performs.AVATARS_URL+'ReadyEva/ReadyEva_v3.json',0, 'https://models.readyplayer.me/66e30a18eca8fb70dcadde68.png?background=68,68,68'],
+//     "Victor": ['https://models.readyplayer.me/66e2fb40222bef18d117faa7.glb', Performs.AVATARS_URL+'ReadyVictor/ReadyVictor.json',0, 'https://models.readyplayer.me/66e2fb40222bef18d117faa7.png?background=68,68,68']
+// }
+const avatars = [
+
+    { id: "EvaLow", src: `${Performs.AVATARS_URL}Eva_Low/Eva_Low.glb`, config: `${Performs.AVATARS_URL}Eva_Low/Eva_Low.json`, preview: `${Performs.AVATARS_URL}Eva_Low/Eva_Low.png`, type: "object" },
+    { id: "Witch", src: `${Performs.AVATARS_URL}Eva_Witch/Eva_Witch.glb`, config: `${Performs.AVATARS_URL}Eva_Witch/Eva_Witch.json`, preview: `${Performs.AVATARS_URL}Eva_Witch/Eva_Witch.png`, type: "object" },
+    { id: "Kevin", src: `${Performs.AVATARS_URL}Kevin/Kevin.glb`, config: `${Performs.AVATARS_URL}Kevin/Kevin.json`, preview: `${Performs.AVATARS_URL}Kevin/Kevin.png`, type: "object" },
+    { id: "Ada", src: `${Performs.AVATARS_URL}Ada/Ada.glb`, config: `${Performs.AVATARS_URL}Ada/Ada.json`, preview: `${Performs.AVATARS_URL}Ada/Ada.png`, type: "object" },
+    { id: "Eva", src: `https://models.readyplayer.me/66e30a18eca8fb70dcadde68.glb`, config: `${Performs.AVATARS_URL}ReadyEva/ReadyEva_v3.json`, preview: 'https://models.readyplayer.me/66e30a18eca8fb70dcadde68.png?background=68,68,68', type: "object" },
+    { id: "Victor", src:`'https://models.readyplayer.me/66e2fb40222bef18d117faa7.glb`, config: `${Performs.AVATARS_URL}ReadyVictor/ReadyVictor.json`, preview: 'https://models.readyplayer.me/66e2fb40222bef18d117faa7.png?background=68,68,68', type: "object" }
+]
 
 class App {
     constructor() {
@@ -91,10 +100,10 @@ class App {
         }
 
         
-        this.assetData = [];
-        for(let name in this.animationsMap) {
-           this.assetData.push( { id: name, type: "video", path: `https://catsl.eelvex.net/static/vid/teacher-${name}.mp4` }); //`https://catsl.eelvex.net/static/vid/teacher-${name}.mp4` //"teacher-video-Ψ.mp4"
-        }
+        this.assetData = [  { id: "Characters", icon: "PersonStanding", type: "folder", children: avatars }, { id: "Videos", icon: "Film", type: "folder", children: this.animationsMap.data, closed: true }];
+        // for(let name in this.animationsMap) {
+        //    this.assetData.push( { id: name, type: "video", src: `https://catsl.eelvex.net/static/vid/teacher-${name}.mp4` }); //`https://catsl.eelvex.net/static/vid/teacher-${name}.mp4` //"teacher-video-Ψ.mp4"
+        // }
 
         this.trajectoriesHelper = new TrajectoriesHelper(  this.performs.currentCharacter.model,  this.performs.currentCharacter.mixer );
 
@@ -112,8 +121,9 @@ class App {
         const mainArea = await LX.init({});
         let menubar = null;
 
-        const localHost = window.location.protocol !== "https:";
         const starterTheme = LX.getTheme();
+        let colorDialog = null;
+        let landmarksDialog = null;
         const menubarButtons = [
             {
                 title: "Change Theme",
@@ -135,12 +145,73 @@ class App {
                 title: "Switch Spacing",
                 icon: "AlignVerticalSpaceAround",
                 callback:  (value, event) => { LX.switchSpacing() }
+            },
+            {
+                title: "Change Colors",
+                icon: "Palette",
+                callback: (v, e) => {
+                    if(colorDialog) {
+                        colorDialog.close();
+                        colorDialog = null;
+                    }
+                    else {
+                        colorDialog = new LX.Dialog( "Color settings", panel => {
+    
+                            panel.addColor("Background", this.backgroundColor, (v) => {
+                                this.backgroundColor = v;                        
+                            }, {});
+                            panel.addColor("Ground truth 2D landmarks", this.referenceColor, (v) => {
+                                this.referenceColor = v;                        
+                            }, {});
+                            panel.addColor("Detected 3D landmarks", this.detectedColor, (v) => {
+                                this.detectedColor = v;
+                            }, {});
+                            
+                        }, { position: [ "45%", "80px"]})
+                    }
+                }
+            },
+            {
+                title: "Feedback visualization",
+                icon: "Eye",
+                callback: (v, e) => {
+                    if(landmarksDialog) {
+                        landmarksDialog.close();
+                        landmarksDialog = null;
+                    }
+                    else {
+                        landmarksDialog = new LX.Dialog( "Feedback visualization", panel => {
+    
+                            panel.addToggle("Video 2D landmarks", this.show2DLandmarksVideo, (v) => {
+                                this.show2DLandmarksVideo = v;                        
+                            }, {});
+                            panel.addToggle("Avatar 2D landmarks", this.show2DLandmarksAvatar, async (v) => {
+                                if( !this.handLandmarker ) {
+                                    await this.initMediapipe();
+                                }
+                                this.show2DLandmarksAvatar = v;                        
+                            }, {});
+                            panel.addToggle("Avatar 3D landmarks", this.show3DLandmarks, async (v) => {
+                                if( !this.handLandmarker ) {
+                                    await this.initMediapipe();
+                                }
+                                this.show3DLandmarks = v;
+                            }, {});
+                            
+                            panel.addButton(null, "Trajectories settings", () => this.showTrajectoriesDialog());
+                        }, { position: [ "45%", "80px"]})
+                    }
+                }
             }
         ];
 
         const avatarMenu = [
-            { name: "Character", icon: "PersonStanding@solid" },
-            { name: "Detect landmakrs", checked: true, icon: "HandsAslInterpreting@solid" },
+            { name: "Detect landmakrs", checked: this.applyMediapipe, icon: "HandsAslInterpreting@solid", callback: async (e) => {
+                this.applyMediapipe = !this.applyMediapipe;
+                if( !this.handLandmarker ) {
+                    await this.initMediapipe();
+                }
+            } },
         ];
 
         if( this.applyMediapipe) {
@@ -148,193 +219,43 @@ class App {
             avatarMenu.push( { name: "Show 3D landmarks", checked: this.show3DLandmarks, icon: "Waypoints@solid" } );
         }
 
-        menubar = mainArea.addMenubar();
-        // menubar = mainArea.addMenubar(
-        // [
-        //     { name: "Video", submenu: [
-        //         { name: "Video source", icon: "FileVideo@solid", callback: () => {
-        //              const assetView = new LX.AssetView();
-        //              assetView.load( this.assetData, ( e ) => {
-        //                 switch( e ) {
-        //                     case AssetViewEvent.ASSET_SELECTED:
-        //                         break;
-        //                     case AssetViewEvent.ASSET_DELETED:
-        //                         break;
-        //                     case AssetViewEvent.ASSET_RENAMED:
-        //                         break;
-        //                     case AssetViewEvent.ASSET_CLONED:
-        //                         break;
-        //                     case AssetViewEvent.ASSET_DBLCLICKED:
-        //                         break;
-        //                     case AssetViewEvent.ASSET_CHECKED:
-        //                         break;
-        //                     case AssetViewEvent.ENTER_FOLDER :
-        //                         break;
-        //                 }
-        //             } );
-        //         } },
-        //         { name: "Show 2D landmarks", checked: this.show2DLandmarksVideo, icon: "Waypoints@solid" },
-        //     ] },
-        //     { name: "Avatar", submenu: avatarMenu },
-        //     { name: "View", submenu: [
-        //         { name: "Background color", icon: "Palette" },
-        //         { name: "Color of 2D landmarks", icon: "Palette" },
-        //         { name: "Color of 3D landmarks", icon: "Palette" }
-        //     ]
-                
-        //     }
-        // ]
-        // );
+        menubar = mainArea.addMenubar( );
         menubar.addButtons( menubarButtons );
         menubar.setButtonImage("Vista-SL", './imgs/vistasl.png', () => {window.open("http://xanthippi.ceid.upatras.gr/VistaSL/EN/VistaSL.html")}, {float: "left"})
         menubar.setButtonIcon("Github", "Github", () => { window.open("https://github.com/upf-gti/vista-sl/") });
         
-        // const videoDialog = new LX.Dialog("Title", p => {
-        //     // Start adding components
-        //     p.addNumber("Example", 18);
-        // }, options);
-
-        const [panels, containerArea] = mainArea.split({type: "vertical", sizes: ["240px", "auto"]});
-        const [topContainer, bottomContainer] = containerArea.split({type: "vertical", sizes: ["80%", "auto"]});
+        const [containerArea, assetsArea] = mainArea.split({type: "vertical", sizes: ["calc( 100% - 280px )", "280px"]});
+        const [topContainer, bottomContainer] = containerArea.split({type: "vertical", sizes: ["80%", "auto"], resize: false});
         const [leftArea, rightArea] = topContainer.split({sizes: ["50%", "auto"]});
-        const [videoMenu, sceneMenu] = panels.split({sizes: ["50%", "auto"]});
-        const videoPanel = videoMenu.addPanel( {className: "m-6", width: "calc(100% - 3rem)"});
-        const scenePanel = sceneMenu.addPanel( {className: "m-6", width: "calc(100% - 3rem)"});
+        //const [videoMenu, sceneMenu] = panels.split({sizes: ["50%", "auto"]});
+        // const videoPanel = videoMenu.addPanel( {className: "m-6", width: "calc(100% - 3rem)"});
+        // const scenePanel = sceneMenu.addPanel( {className: "m-6", width: "calc(100% - 3rem)"});
        
-        const refresh = () => {
-            // ------------------------------------------------- Video Menu -------------------------------------------------
-            videoPanel.clear();
-
-            videoPanel.addTitle("Visualize generated animation from video", {style: { background: "none"}});
-
-            videoPanel.sameLine();
-            const values = Object.keys(this.animationsMap);
-            videoPanel.addSelect("SL Video", values, this.selectedVideo, async (signName, event) => {
-                this.selectedVideo = signName;
-                this.loadVideo( signName );
-                try {
-                    const response = await fetch( this.animationsMap[signName] );
-                    if( response.ok ) {
-                        const data = await response.text();
-
-                        this.performs.keyframeApp.loadFiles( [ {name: this.animationsMap[signName], data}] , ( animationName ) => {
-                            // Show canvas after animation loaded
-                            this.characterCanvas.classList.remove("hidden");
-                            this.sceneCanvas.classList.remove("hidden");
-
-                            this.performs.keyframeApp.onChangeAnimation(animationName, true);
-                            this.performs.keyframeApp.changePlayState(false);
-                            const animation = this.performs.keyframeApp.bindedAnimations[animationName][this.performs.currentCharacter.model.name];
-                            this.trajectoriesHelper.computeTrajectories(animation);
-                        })
-                        this.buildAnimation = false;
-                    }
-                    else {
-                        this.buildAnimation = true;
-                    }
-                    refresh();
-                }
-                catch( err ) {
-                    this.buildAnimation = true;
-                }
-            }, { filter: true, overflowContainerY: containerArea.root, width: "40%"});
-
-            videoPanel.endLine();
-
-            videoPanel.addColor("Reference 2D landmarks", this.referenceColor, (v) => {
-                this.referenceColor = v;
-                const landmarks = this.originalLandmarks[0].landmarks;
-                    if(landmarks) {
-                        // landmarks.map(landmark => {
-                        //     return {
-                        //         x: 1 - landmark.x,
-                        //         y: landmark.y,
-                        //         visibility: landmark.visibility
-                        //     };
-                        // });
-                        this.drawingVideoUtils.drawConnectors( landmarks, HandLandmarker.HAND_CONNECTIONS, {color: '#1a2025', lineWidth: 4}); //'#00FF00'
-                        this.drawingVideoUtils.drawLandmarks( landmarks, {color: this.referenceColor , fillColor: this.referenceColor, lineWidth: 2}); //'#00FF00'
-                }
-            },  { nameWidth: "200px", width: "40%" });
-
-            // ------------------------------------------------- Scene Menu -------------------------------------------------
-            scenePanel.clear();
-            const charactersInfo = [];
-
-            for(let character in this.characters) {
-                charactersInfo.push( { value: character, src: this.characters[character][3]} );
+         const assetView = new LX.AssetView( {
+            previewActions: [{name:"Load", callback: ( e ) => { this.loadAsset(e) }}]
+         });
+        assetView.load( this.assetData, async ( e ) => {
+            switch( e.type ) {
+                case LX.AssetViewEvent.ASSET_SELECTED:
+                    console.log("selected")
+                    break;
+                case LX.AssetViewEvent.ASSET_DELETED:
+                    break;
+                case LX.AssetViewEvent.ASSET_RENAMED:
+                    break;
+                case LX.AssetViewEvent.ASSET_CLONED:
+                    break;
+                case LX.AssetViewEvent.ASSET_DBLCLICKED:
+                    console.log("double clicked")
+                    this.loadAsset( e.item );
+                    break;
+                case LX.AssetViewEvent.ASSET_CHECKED:
+                    break;
+                case LX.AssetViewEvent.ENTER_FOLDER :
+                    break;
             }
-            scenePanel.addSelect("Character", charactersInfo, this.performs.currentCharacter ? this.performs.currentCharacter.model.name : charactersInfo[0].value, async (value, event) => {
-                $('#loading').fadeIn();
-                this.performs.loadAvatar(this.characters[value][0], this.characters[value][1] , new THREE.Quaternion(), value, () => {
-                    this.performs.changeAvatar( value );
-                    this.trajectoriesHelper.object = this.performs.currentCharacter.model;
-                    const animation = this.performs.keyframeApp.bindedAnimations[this.performs.keyframeApp.currentAnimation][this.performs.currentCharacter.model.name];
-                    let boneName = null;
-                    for(let i = 0; i < animation.mixerBodyAnimation.tracks.length; i++) {
-                        const track = animation.mixerBodyAnimation.tracks[i]
-                        const trackName = track.name;
-                        for(let trajectory in this.trajectoriesHelper.trajectories) {
-                            
-                            if(trackName.includes(trajectory+".") || trackName.includes(trajectory.replace("4","EndSite")+".")) {
-                                boneName = trackName.replace(".quaternion", "");
-                                if(boneName) {
-                                    this.trajectoriesHelper.trajectories[trajectory].name = boneName;
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                    
-                    const mixer = this.performs.currentCharacter.mixer;
-                    mixer.setTime(this.video.currentTime);
-                    
-                    const track = animation.mixerBodyAnimation.tracks[0];
-                    this.trajectoriesHelper.trajectoryEnd = track.times.length;
-                    this.trajectoriesHelper.mixer = mixer;
-                    this.trajectoriesHelper.computeTrajectories(animation);
-
-                    $('#loading').fadeOut(); //hide();
-                }, (err) => {
-                    $('#loading').fadeOut();
-                    alert("There was an error loading the character", "Character not loaded");
-                } );
-            }, { filter: true, overflowContainerY: containerArea.root, width: "80%"})
-
-            scenePanel.addColor("Background", {r: this.performs.scene.background.r, g: this.performs.scene.background.g, b: this.performs.scene.background.b } , (v) => {
-                this.performs.setBackPlaneColour(v);
-            },  { nameWidth: "200px", width: "40%" });
-
-            scenePanel.sameLine();
-            scenePanel.addToggle("Apply Mediapipe", this.applyMediapipe, async (v) => {
-                this.applyMediapipe = v;
-                if( !this.handLandmarker ) {
-                    await this.initMediapipe();
-                }
-
-            }, { nameWidth: "200px", width: "40%" })
-
-            scenePanel.addColor("Detected 3D landmarks", this.detectedColor, (v) => {
-                this.detectedColor = v;
-            },  { nameWidth: "200px", width: "40%" });
-
-            scenePanel.endLine();
-            const toggle = scenePanel.addToggle("Show 3D Landmarks", this.show3DLandmarks, (v) => {
-                if( !this.applyMediapipe && v) {
-                    LX.popup("You have to enable Mediapipe to show 3D landmarks!");
-                    toggle.set(false)
-                    return;
-                }
-                this.show3DLandmarks = v;
-            }, { nameWidth: "200px", width: "40%" })
-
-            if(this.selectedVideo) {
-                scenePanel.addButton(null, "Open trajectories dialog", () => {
-                    this.showTrajectoriesDialog();
-                }, { width: "40%"} );
-            }
-        }
-        refresh();
+        } );
+        assetsArea.attach( assetView );
 
         // ------------------------------------------------- Reference sign area -------------------------------------------------
         this.video = document.createElement('video');
@@ -348,7 +269,7 @@ class App {
         const info = document.createElement('div');
         info.id = "select-video";
         info.innerText = "Select a video to start";
-        info.classList = "p-6 text-center text-xxl ";
+        info.classList = "p-6 text-center text-xxl content-center";
 
         leftArea.attach(info);
 
@@ -417,10 +338,105 @@ class App {
         leftArea.attach(this.videoCanvas);
     }
 
+    async loadAsset( item ) {
+        if( item.type == "video" ) {
+            const signName = item.id;
+            this.selectedVideo = signName;
+            this.loadVideo( signName );
+            $('#text').innerText = "Loading video..."
+            $('#loading').fadeIn();
+            try {
+                const response = await fetch( item.animation );
+                if( response.ok ) {
+                    const data = await response.text();
+
+                    this.performs.keyframeApp.loadFiles( [ {name: item.animation, data}] , ( animationName ) => {
+                        // Show canvas after animation loaded
+                        this.characterCanvas.classList.remove("hidden");
+                        this.sceneCanvas.classList.remove("hidden");
+
+                        this.performs.keyframeApp.onChangeAnimation(animationName, true);
+                        this.performs.keyframeApp.changePlayState(false);
+                        this.trajectoriesHelper.mixer = this.performs.keyframeApp.mixer;
+                        if( this.performs.keyframeApp.currentAnimation ) {
+                            const animation = this.performs.keyframeApp.bindedAnimations[this.performs.keyframeApp.currentAnimation][this.performs.currentCharacter.model.name];
+                            let boneName = null;
+                            for(let i = 0; i < animation.mixerBodyAnimation.tracks.length; i++) {
+                                const track = animation.mixerBodyAnimation.tracks[i]
+                                const trackName = track.name;
+                                for(let trajectory in this.trajectoriesHelper.trajectories) {
+                                    
+                                    if(trackName.includes(trajectory+".") || trackName.includes(trajectory.replace("4","EndSite")+".")) {
+                                        boneName = trackName.replace(".quaternion", "");
+                                        if(boneName) {
+                                            this.trajectoriesHelper.trajectories[trajectory].name = boneName;
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                            this.trajectoriesHelper.computeTrajectories(animation);
+                        }
+                    })
+                    this.buildAnimation = false;
+                }
+                else {
+                    this.buildAnimation = true;
+                }
+            }
+            catch( err ) {
+                this.buildAnimation = true;
+            }
+        }
+        else {
+            this.performs.loadAvatar( item.src, 0 , new THREE.Quaternion(), item.id, () => {
+                this.performs.changeAvatar( item.id );
+    
+                this.trajectoriesHelper.object = this.performs.currentCharacter.model;
+                const mixer = this.performs.currentCharacter.mixer;
+                mixer.setTime(this.video.currentTime);
+                if( this.performs.keyframeApp.currentAnimation ) {
+                    const animation = this.performs.keyframeApp.bindedAnimations[this.performs.keyframeApp.currentAnimation][this.performs.currentCharacter.model.name];
+                    let boneName = null;
+                    for(let i = 0; i < animation.mixerBodyAnimation.tracks.length; i++) {
+                        const track = animation.mixerBodyAnimation.tracks[i]
+                        const trackName = track.name;
+                        for(let trajectory in this.trajectoriesHelper.trajectories) {
+                            
+                            if(trackName.includes(trajectory+".") || trackName.includes(trajectory.replace("4","EndSite")+".")) {
+                                boneName = trackName.replace(".quaternion", "");
+                                if(boneName) {
+                                    this.trajectoriesHelper.trajectories[trajectory].name = boneName;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    const track = animation.mixerBodyAnimation.tracks[0];
+                    this.trajectoriesHelper.trajectoryEnd = track.times.length;
+                    this.trajectoriesHelper.mixer = mixer;
+                    this.trajectoriesHelper.computeTrajectories(animation);
+            }
+            
+            
+
+            $('#loading').fadeOut(); //hide();
+        }, (err) => {
+            $('#loading').fadeOut();
+            alert("There was an error loading the character", "Character not loaded");
+        } );
+    }
+    }
+
     showTrajectoriesDialog() {
 
-        const dialog = new LX.Dialog("Trajectories", (p) => {
-
+        if(this.trajectoriesDialog) {
+            this.trajectoriesDialog.close();
+            this.trajectoriesDialog = null;
+            return;
+        }
+        this.trajectoriesDialog = new LX.Dialog("Trajectories", (p) => {
+            p.clear();
             const trajectories = this.trajectoriesHelper.trajectories;
 
             let leftValue = true;
@@ -496,8 +512,6 @@ class App {
    
     async loadVideo( signName ) {
 
-        $('#text').innerText = "Loading video..."
-        $('#loading').fadeIn();
         const landmarksDataUrl = 'https://catsl.eelvex.net/static/vid_data/teacher-' + signName + '/teacher-' + signName + '_keyframe_1.json';
         this.video.src = `https://catsl.eelvex.net/static/vid/teacher-${signName}.mp4`; // "teacher-video-Ψ.mp4";
 
@@ -711,8 +725,21 @@ class App {
 
         this.characterCanvas.width = width;
         this.characterCanvas.height = height;
+        
         const canvasCtx = this.characterCanvas.getContext('2d');
         canvasCtx.clearRect(0, 0, this.characterCanvas.width, this.characterCanvas.height);
+        
+        if( this.originalLandmarks ) {
+            const offset = this.video.clientHeight/ this.video.videoHeight;
+            this.videoCanvas.height = this.video.clientHeight;
+            this.videoCanvas.width =  this.video.videoWidth*offset;
+            const landmarks = this.originalLandmarks[0].landmarks;
+            if(landmarks) {
+         
+                this.drawingVideoUtils.drawConnectors( landmarks, HandLandmarker.HAND_CONNECTIONS, {color: '#1a2025', lineWidth: 4}); //'#00FF00'
+                this.drawingVideoUtils.drawLandmarks( landmarks, {color: this.referenceColor , fillColor: this.referenceColor, lineWidth: 2}); //'#00FF00'
+            }
+        }
     }
 
     async animate( dt ) {
@@ -723,7 +750,7 @@ class App {
         const canvasCtx = this.characterCanvas.getContext('2d');
         canvasCtx.clearRect(0, 0, this.characterCanvas.width, this.characterCanvas.height);
 
-        if( this.applyMediapipe && this.handLandmarker) {
+        if( this.handLandmarker && ( this.show2DLandmarksAvatar || this.show3DLandmarks )) {
 
             // Convert 3D canvas ( three scene ) into image to send it to Mediapipe
             const bitmap = await createImageBitmap(this.performs.renderer.domElement);
@@ -735,30 +762,33 @@ class App {
                 const originalData = this.originalLandmarks ? this.originalLandmarks[0].handedness : "";
                 let index = originalData.indexOf("index=") + 6;
                 index = Number(originalData[index]);
-                // Draw 2D landmarks
-                for (let j = 0; j < detectionsHand.landmarks.length; j++) {
-                    const detectedLandmarks = detectionsHand.landmarks[j];
-                // for (const detectedLandmarks of detectionsHand.landmarks) {
-                    let smoothingFactor = 1;
-                    if (this.prevLandmarks) {
-                        for (let i = 0; i < detectedLandmarks.length; i++) {
-                            detectedLandmarks[i].x = smoothingFactor * detectedLandmarks[i].x + (1 - smoothingFactor) * this.prevLandmarks[i].x;
-                            detectedLandmarks[i].y = smoothingFactor * detectedLandmarks[i].y + (1 - smoothingFactor) * this.prevLandmarks[i].y;
+                
+                if(  this.show2DLandmarksAvatar ) {
+                    // Draw 2D landmarks
+                    for (let j = 0; j < detectionsHand.landmarks.length; j++) {
+                        const detectedLandmarks = detectionsHand.landmarks[j];
+                    // for (const detectedLandmarks of detectionsHand.landmarks) {
+                        let smoothingFactor = 1;
+                        if (this.prevLandmarks) {
+                            for (let i = 0; i < detectedLandmarks.length; i++) {
+                                detectedLandmarks[i].x = smoothingFactor * detectedLandmarks[i].x + (1 - smoothingFactor) * this.prevLandmarks[i].x;
+                                detectedLandmarks[i].y = smoothingFactor * detectedLandmarks[i].y + (1 - smoothingFactor) * this.prevLandmarks[i].y;
+                            }
                         }
+    
+                        let color = 'red'; //this.detectedColor;
+                        if(index == detectionsHand.handedness[j][0].index) {
+    
+                            let transformed = transformLandmarks(flipLandmarks(originalLandmarks), detectedLandmarks);
+                            const score = scoreLandmarks(transformed, detectedLandmarks);
+                            color = scoreToColor(score);
+                            this.drawingCharacterUtils.drawConnectors(transformed, HandLandmarker.HAND_CONNECTIONS, { color:  '#1a2025', lineWidth: 2 });
+                            this.drawingCharacterUtils.drawLandmarks(transformed, { color: this.referenceColor, lineWidth: 2 });
+                        }
+                        this.prevLandmarks = detectedLandmarks;
+                        this.drawingCharacterUtils.drawConnectors(detectedLandmarks, HandLandmarker.HAND_CONNECTIONS, { color: "#f0f0f0", lineWidth: 2 });
+                        this.drawingCharacterUtils.drawLandmarks(detectedLandmarks, { color: color, lineWidth: 2 });
                     }
-
-                    let color = 'red'; //this.detectedColor;
-                    if(index == detectionsHand.handedness[j][0].index) {
-
-                        let transformed = transformLandmarks(flipLandmarks(originalLandmarks), detectedLandmarks);
-                        const score = scoreLandmarks(transformed, detectedLandmarks);
-                        color = scoreToColor(score);
-                        this.drawingCharacterUtils.drawConnectors(transformed, HandLandmarker.HAND_CONNECTIONS, { color:  '#1a2025', lineWidth: 2 });
-                        this.drawingCharacterUtils.drawLandmarks(transformed, { color: this.referenceColor, lineWidth: 2 });
-                    }
-                    this.prevLandmarks = detectedLandmarks;
-                    this.drawingCharacterUtils.drawConnectors(detectedLandmarks, HandLandmarker.HAND_CONNECTIONS, { color: "#f0f0f0", lineWidth: 2 });
-                    this.drawingCharacterUtils.drawLandmarks(detectedLandmarks, { color: color, lineWidth: 2 });
                 }
 
                 if( this.show3DLandmarks ) {
