@@ -46,8 +46,8 @@ class TrajectoriesHelper {
         }
         this.trajectoryStart = 0;
         this.trajectoryEnd = 100;
-        // this.trajectoryWindow = 100;
     }
+        
     computeTrajectories( animation ) {
         let boneName = null;
 
@@ -228,6 +228,18 @@ class TrajectoriesHelper {
                 }
             }
             line.geometry.setColors(colors);
+        }
+    }
+
+    show( ) {
+        for( let trajectory in this.trajectories ) {
+            this.trajectories[trajectory].visible = true;
+        }
+    }
+
+    hide( ) {
+        for( let trajectory in this.trajectories ) {
+            this.trajectories[trajectory].visible = false;
         }
     }
 }

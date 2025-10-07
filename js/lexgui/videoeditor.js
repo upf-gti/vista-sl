@@ -567,16 +567,18 @@ class VideoEditor {
         window.addEventListener( "keyup", this.onKeyUp);
 
         videoArea.onresize = (v) => {
-            bottomArea.setSize([v.width, 40]);
+            if( bottomArea.parentArea ) {
+                bottomArea.setSize([bottomArea.parentArea.root.clientWidth, 40]);
+            }
 
             const ratio = this.video.clientHeight / this.video.videoHeight;
             this.cropArea.style.height = this.video.clientHeight + "px";
             this.cropArea.style.width = this.video.videoWidth * ratio + "px";
         }
 
+
         timeBarArea.onresize = (v) => {
             let availableWidth = this.controlsArea.root.clientWidth - controlsLeft.root.clientWidth - controlsRight.root.clientWidth - 20;
-            // let availableWidth = this.controlsArea.root.clientWidth - controlsLeft.root.clientWidth;
             this.timebar.resize([availableWidth, v.height]);
         }
 

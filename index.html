@@ -3,7 +3,8 @@
         <title>VISTA-SL Demo</title>
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <link rel="icon" type="image/x-icon" href="./imgs/vistasl.png">
-        <link rel="stylesheet" href="https://cdn.skypack.dev/lexgui@0.7.5/build/lexgui.css">
+        <link rel="stylesheet" href="./js/lexgui/lexgui.css">
+        <!-- <link rel="stylesheet" href="https://cdn.skypack.dev/lexgui@0.7.5/build/lexgui.css"> -->
         <style>
             html, body { width:100%; height:100%; margin:0; padding:0; overflow:hidden; }
             .triangle1 {
@@ -54,12 +55,22 @@
         <script src="./external/jquery-3.6.0.min.js"></script>
         <script async src="./external/es-module-shims.js"></script>
 
-        <script type="importmap">
+        <!-- <script type="importmap">
 			{
 				"imports": {
 					"three": "./external/three/build/three.module.js",
                     "three/addons/": "./external/three/jsm/",
                     "lexgui": "https://cdn.skypack.dev/lexgui@0.7.9/build/lexgui.module.js",
+                    "lexgui/extensions/": "https://cdn.skypack.dev/lexgui@0.7.9/build/extensions/"
+                }
+            }
+		</script> -->
+         <script type="importmap">
+			{
+				"imports": {
+					"three": "./external/three/build/three.module.js",
+                    "three/addons/": "./external/three/jsm/",
+                    "lexgui": "./js/lexgui/lexgui.module.js",
                     "lexgui/extensions/": "https://cdn.skypack.dev/lexgui@0.7.9/build/extensions/"
                 }
             }
@@ -73,17 +84,7 @@
 			    <p id="text" class="text">Loading avatar, please wait</p>
     
 		</div>
-        <!-- <div style="display: flex; flex-direction: row;">
-
-            <div style="width: 50%;">
-                <video src="crawl-catsl/videos/video-Ω.mp4"></video>
-            </div>
-            <div style="width: 50%;" id="scene"></div>
-        </div> -->
-
-            <script type="module" src="main.js">
-                
-            </script>
+        <script type="module" src="main.js"></script>
 
     </body>
 </html>

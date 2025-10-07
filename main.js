@@ -19,14 +19,16 @@ let runningMode = "IMAGE";
 //     "Eva": ['https://models.readyplayer.me/66e30a18eca8fb70dcadde68.glb', Performs.AVATARS_URL+'ReadyEva/ReadyEva_v3.json',0, 'https://models.readyplayer.me/66e30a18eca8fb70dcadde68.png?background=68,68,68'],
 //     "Victor": ['https://models.readyplayer.me/66e2fb40222bef18d117faa7.glb', Performs.AVATARS_URL+'ReadyVictor/ReadyVictor.json',0, 'https://models.readyplayer.me/66e2fb40222bef18d117faa7.png?background=68,68,68']
 // }
+
+
 const avatars = [
 
     { id: "EvaLow", src: `${Performs.AVATARS_URL}Eva_Low/Eva_Low.glb`, config: `${Performs.AVATARS_URL}Eva_Low/Eva_Low.json`, preview: `${Performs.AVATARS_URL}Eva_Low/Eva_Low.png`, type: "object" },
     { id: "Witch", src: `${Performs.AVATARS_URL}Eva_Witch/Eva_Witch.glb`, config: `${Performs.AVATARS_URL}Eva_Witch/Eva_Witch.json`, preview: `${Performs.AVATARS_URL}Eva_Witch/Eva_Witch.png`, type: "object" },
     { id: "Kevin", src: `${Performs.AVATARS_URL}Kevin/Kevin.glb`, config: `${Performs.AVATARS_URL}Kevin/Kevin.json`, preview: `${Performs.AVATARS_URL}Kevin/Kevin.png`, type: "object" },
     { id: "Ada", src: `${Performs.AVATARS_URL}Ada/Ada.glb`, config: `${Performs.AVATARS_URL}Ada/Ada.json`, preview: `${Performs.AVATARS_URL}Ada/Ada.png`, type: "object" },
-    { id: "Eva", src: `https://models.readyplayer.me/66e30a18eca8fb70dcadde68.glb`, config: `${Performs.AVATARS_URL}ReadyEva/ReadyEva_v3.json`, preview: 'https://models.readyplayer.me/66e30a18eca8fb70dcadde68.png?background=68,68,68', type: "object" },
-    { id: "Victor", src:`'https://models.readyplayer.me/66e2fb40222bef18d117faa7.glb`, config: `${Performs.AVATARS_URL}ReadyVictor/ReadyVictor.json`, preview: 'https://models.readyplayer.me/66e2fb40222bef18d117faa7.png?background=68,68,68', type: "object" }
+    { id: "Eva", src: `https://models.readyplayer.me/66e30a18eca8fb70dcadde68.glb`, config: `${Performs.AVATARS_URL}ReadyEva/ReadyEva_v3.json`, preview: `https://models.readyplayer.me/66e30a18eca8fb70dcadde68.png`, type: "object" },
+    { id: "Victor", src:`https://models.readyplayer.me/66e2fb40222bef18d117faa7.glb`, config: `${Performs.AVATARS_URL}ReadyVictor/ReadyVictor.json`, preview: `https://models.readyplayer.me/66e2fb40222bef18d117faa7.png`, type: "object" }
 ]
 
 class App {
@@ -51,22 +53,23 @@ class App {
         this.detectedColor =  '#383838';
 
         // GUI actions
-        this.applyMediapipe = false;
+        this.show2DLandmarksVideo = false;
+        this.show2DLandmarksAvatar = false;
         this.show3DLandmarks = false;
-        this.buildAnimation = true;
+        this.showTrajectories = true;
 
         this.delayedResizeTime = 500; //ms
         this.delayedResizeID = null;
-
+        
         // Data provided
         this.originalLandmarks = null;
         this.originalLandmarks3D = [];
-
+        
         // Mediapipe
         this.handLandmarker = null;
         this.drawingVideoUtils = null;
         this.drawingCharacterUtils = null;
-
+        
         // 3D mediapipe scene
         this.mediapipeScene = {
             scene: new THREE.Scene(),
@@ -74,7 +77,8 @@ class App {
             leftHandPoints: new THREE.Group(),
             rightHandPoints: new THREE.Group()
         }
-
+        this.buildAnimation = true;
+        
         // Init performs (character )
         this.performs = new Performs();
         this.performs.init({srcReferencePose: 2, trgReferencePose: 2, color: "#0B0B0C", restrictView: false, onReady: () => { this.init() }});
@@ -126,25 +130,69 @@ class App {
         let landmarksDialog = null;
         const menubarButtons = [
             {
-                title: "Change Theme",
-                icon: starterTheme == "dark" ? "Moon" : "Sun",
-                swap: starterTheme == "dark" ? "Sun" : "Moon",
-                callback:  (value, event) => { 
-                    LX.switchTheme();
-                    if( value == "dark" ) {
-                        this.window.backgroundColor = "rgba(200, 200, 255, 0.15)";
-                        this.window.handlerColor = "whitesmoke";
+                selectable: true,
+                selected: true,
+                icon: "Folder",
+                title: "Assets",
+                callback: (v, e) => {
+                    if (mainArea.splitExtended) {
+                        mainArea.reduce();
                     }
                     else {
-                        this.window.backgroundColor = "rgba(200, 200, 255, 0.52)";
-                        this.window.handlerColor = "#3e4360ff";
+                        mainArea.extend();
                     }
-                    this.videoEditor.timebar._draw(); }
+                }
             },
             {
-                title: "Switch Spacing",
-                icon: "AlignVerticalSpaceAround",
-                callback:  (value, event) => { LX.switchSpacing() }
+                title: "Feedback visualization",
+                icon: "Eye",
+                callback: (v, e) => {
+                    if(landmarksDialog) {
+                        landmarksDialog.close();
+                        landmarksDialog = null;
+                    }
+                    else {
+                        landmarksDialog = new LX.Dialog( "Feedback visualization", panel => {
+    
+                            const refresh = () => {
+                                panel.clear();
+                                panel.addToggle("Video 2D landmarks", this.show2DLandmarksVideo, (v) => {
+                                    this.show2DLandmarksVideo = v;
+                                    this.draw2DLandmarksVideo();                       
+                                }, {});
+                                panel.addToggle("Avatar 2D landmarks", this.show2DLandmarksAvatar, async (v) => {
+                                    if( !this.handLandmarker ) {
+                                        await this.initMediapipe();
+                                    }
+                                    this.show2DLandmarksAvatar = v;                        
+                                }, {});
+                                panel.addToggle("Avatar 3D landmarks", this.show3DLandmarks, async (v) => {
+                                    if( !this.handLandmarker ) {
+                                        await this.initMediapipe();
+                                    }
+                                    this.show3DLandmarks = v;
+                                }, {});
+                                
+                                panel.addToggle("Show trajectories", this.showTrajectories, async (v) => {
+                                    this.showTrajectories = v;
+                                    if( v ) {
+                                        this.trajectoriesHelper.show();
+                                    }
+                                    else {
+                                        this.trajectoriesHelper.hide();
+                                    }
+                                    refresh();
+                                }, {});
+
+                                if( this.showTrajectories ) {
+                                    panel.addButton(null, "Trajectories settings", () => this.showTrajectoriesDialog());
+                                }
+                            }
+                            refresh();
+
+                        }, { position: [ "45%", "80px"]})
+                    }
+                }
             },
             {
                 title: "Change Colors",
@@ -172,69 +220,46 @@ class App {
                 }
             },
             {
-                title: "Feedback visualization",
-                icon: "Eye",
-                callback: (v, e) => {
-                    if(landmarksDialog) {
-                        landmarksDialog.close();
-                        landmarksDialog = null;
+                title: "Change Theme",
+                icon: starterTheme == "dark" ? "Moon" : "Sun",
+                swap: starterTheme == "dark" ? "Sun" : "Moon",
+                callback:  (value, event) => { 
+                    LX.switchTheme();
+                    if( value == "dark" ) {
+                        this.window.backgroundColor = "rgba(200, 200, 255, 0.15)";
+                        this.window.handlerColor = "whitesmoke";
                     }
                     else {
-                        landmarksDialog = new LX.Dialog( "Feedback visualization", panel => {
-    
-                            panel.addToggle("Video 2D landmarks", this.show2DLandmarksVideo, (v) => {
-                                this.show2DLandmarksVideo = v;                        
-                            }, {});
-                            panel.addToggle("Avatar 2D landmarks", this.show2DLandmarksAvatar, async (v) => {
-                                if( !this.handLandmarker ) {
-                                    await this.initMediapipe();
-                                }
-                                this.show2DLandmarksAvatar = v;                        
-                            }, {});
-                            panel.addToggle("Avatar 3D landmarks", this.show3DLandmarks, async (v) => {
-                                if( !this.handLandmarker ) {
-                                    await this.initMediapipe();
-                                }
-                                this.show3DLandmarks = v;
-                            }, {});
-                            
-                            panel.addButton(null, "Trajectories settings", () => this.showTrajectoriesDialog());
-                        }, { position: [ "45%", "80px"]})
+                        this.window.backgroundColor = "rgba(200, 200, 255, 0.52)";
+                        this.window.handlerColor = "#3e4360ff";
                     }
+                    this.videoEditor.timebar._draw();
+                }
+            },
+            {
+                title: "Help",
+                icon: "Info",
+                callback:  (value, event) => {
+                    tour.begin();
                 }
             }
         ];
-
-        const avatarMenu = [
-            { name: "Detect landmakrs", checked: this.applyMediapipe, icon: "HandsAslInterpreting@solid", callback: async (e) => {
-                this.applyMediapipe = !this.applyMediapipe;
-                if( !this.handLandmarker ) {
-                    await this.initMediapipe();
-                }
-            } },
-        ];
-
-        if( this.applyMediapipe) {
-            avatarMenu.push( { name: "Show 2D landmarks", checked: this.show2DLandmarksAvatar, icon: "Waypoints@solid" } );
-            avatarMenu.push( { name: "Show 3D landmarks", checked: this.show3DLandmarks, icon: "Waypoints@solid" } );
-        }
-
+  
         menubar = mainArea.addMenubar( );
         menubar.addButtons( menubarButtons );
         menubar.setButtonImage("Vista-SL", './imgs/vistasl.png', () => {window.open("http://xanthippi.ceid.upatras.gr/VistaSL/EN/VistaSL.html")}, {float: "left"})
         menubar.setButtonIcon("Github", "Github", () => { window.open("https://github.com/upf-gti/vista-sl/") });
         
         const [containerArea, assetsArea] = mainArea.split({type: "vertical", sizes: ["calc( 100% - 280px )", "280px"]});
+ 
         const [topContainer, bottomContainer] = containerArea.split({type: "vertical", sizes: ["80%", "auto"], resize: false});
         const [leftArea, rightArea] = topContainer.split({sizes: ["50%", "auto"]});
-        //const [videoMenu, sceneMenu] = panels.split({sizes: ["50%", "auto"]});
-        // const videoPanel = videoMenu.addPanel( {className: "m-6", width: "calc(100% - 3rem)"});
-        // const scenePanel = sceneMenu.addPanel( {className: "m-6", width: "calc(100% - 3rem)"});
        
-         const assetView = new LX.AssetView( {
+        this.assetView = new LX.AssetView( {
             previewActions: [{name:"Load", callback: ( e ) => { this.loadAsset(e) }}]
-         });
-        assetView.load( this.assetData, async ( e ) => {
+        });
+
+        this.assetView.load( this.assetData, async ( e ) => {
             switch( e.type ) {
                 case LX.AssetViewEvent.ASSET_SELECTED:
                     console.log("selected")
@@ -255,7 +280,7 @@ class App {
                     break;
             }
         } );
-        assetsArea.attach( assetView );
+        assetsArea.attach( this.assetView );
 
         // ------------------------------------------------- Reference sign area -------------------------------------------------
         this.video = document.createElement('video');
@@ -265,7 +290,8 @@ class App {
         leftArea.attach(this.video);
         leftArea.root.style.position = "relative";
 
-        this.performs.renderer.domElement.style="width:100%;position:absolute;";
+        this.performs.renderer.domElement.style="width:100%;position:absolute;cursor:grab;";
+    
         const info = document.createElement('div');
         info.id = "select-video";
         info.innerText = "Select a video to start";
@@ -279,13 +305,14 @@ class App {
         this.characterCanvas.style="width:100%;position:absolute;";
         this.characterCanvas.className="hidden";
         this.characterCanvas.style.pointerEvents = "none";
-
+        this.characterCanvas.style.cursor = "grab";
+        
         // Show mediapipe 3D landmarks using threejs
         this.sceneCanvas = document.createElement('canvas');
         this.sceneCanvas.style="width:100%;position:absolute;";
         this.sceneCanvas.className="hidden";
         this.sceneCanvas.style.pointerEvents = "none";
-
+        this.sceneCanvas.style.cursor = "grab";
         // const container = LX.makeContainer(["auto", "auto"], "", `<video id="video" class="hidden" controls style="width:100%;position:absolute;"></video><canvas id="reference-mediapipe-canvas" class="hidden" style="width:100%;position:absolute;"></canvas>`, leftArea);
         // container.style.position = "relative";
         rightArea.attach(this.performs.renderer.domElement); // three js character
@@ -336,6 +363,58 @@ class App {
         this.videoCanvas.className="hidden";
         this.videoCanvas.style.pointerEvents = "none";
         leftArea.attach(this.videoCanvas);
+
+        const tour = new LX.Tour([
+            {
+                title: "Welcome to VISTA-SL demo",
+                content: "This is the main area where you can visualize the teacher video and the virtual avatar performing the same sign. Select a video from the assets to start.",
+                reference: topContainer.root,
+                side: "center",
+                align: "center"
+            },
+            {
+                title: "Menubar",
+                content: "This menubar contains all the main actions and settings for customize the visualization.",
+                reference: menubar.root,
+                side: "bottom",
+                align: "center"
+            },
+            {
+                title: "Videos and avatars browser",
+                content: "Press this button to show/hide the Content Browser of the bottom.",
+                reference: menubar.buttons["Assets"].root,
+                side: "bottom",
+                align: "center"
+            },
+            {
+                title: "Feedback visualization",
+                content: "Press this button to show/hide feedback settings. Show 2D reference landmakrs in the video or in the avatar or detect real-time 3D lanmarks for the avatar. Configure the animation trajectories.",
+                reference: menubar.buttons["Feedback visualization"].root,
+                side: "bottom",
+                align: "center"
+            },
+            {
+                title: "Change colors",
+                content: "Press this button to show/hide color settings. Change the color of the scene background or of the landmarks.",
+                reference: menubar.buttons["Change Colors"].root,
+                side: "bottom",
+                align: "center"
+            },
+            {
+                title: "Change application theme",
+                content: "Press this button to change between dark and light theme.",
+                reference: menubar.buttons["Change Theme"].root,
+                side: "bottom",
+                align: "center"
+            },
+            {
+                title: "Assets",
+                content: "In this area you can select the video to be reproduced and the avatar you want to perform the sign",
+                reference: this.assetView.root,
+                side: "top",
+                align: "center"
+            }
+        ], { offset: 8, radius: 12, horizontalOffset: 12, verticalOffset: 4 });
     }
 
     async loadAsset( item ) {
@@ -574,19 +653,22 @@ class App {
                     if( response.ok ) {
                         const landmarksData = await response.json();
                         this.originalLandmarks = landmarksData;
-                        const landmarks = landmarksData[0].landmarks;
-                        if(landmarks) {
-                            // landmarks.map(landmark => {
-                            //     return {
-                            //         x: 1 - landmark.x,
-                            //         y: landmark.y,
-                            //         visibility: landmark.visibility
-                            //     };
-                            // });
-                            this.drawingVideoUtils.drawConnectors( landmarks, HandLandmarker.HAND_CONNECTIONS, {color: '#1a2025', lineWidth: 4}); //'#00FF00'
-                            this.drawingVideoUtils.drawLandmarks( landmarks, {color: this.referenceColor, fillColor: this.referenceColor, lineWidth: 2}); //'#00FF00'
-
+                        if(this.show2DLandmarksVideo) {
+                            this.draw2DLandmarksVideo();
                         }
+                        // const landmarks = landmarksData[0].landmarks;
+                        // if(landmarks) {
+                        //     // landmarks.map(landmark => {
+                        //     //     return {
+                        //     //         x: 1 - landmark.x,
+                        //     //         y: landmark.y,
+                        //     //         visibility: landmark.visibility
+                        //     //     };
+                        //     // });
+                        //     this.drawingVideoUtils.drawConnectors( landmarks, HandLandmarker.HAND_CONNECTIONS, {color: '#1a2025', lineWidth: 4}); //'#00FF00'
+                        //     this.drawingVideoUtils.drawLandmarks( landmarks, {color: this.referenceColor, fillColor: this.referenceColor, lineWidth: 2}); //'#00FF00'
+
+                        // }
                     }
                     else {
                         LX.popup("No mediapipe landmarks available for this video");
@@ -705,6 +787,21 @@ class App {
         });
     }
 
+    draw2DLandmarksVideo() {
+        const canvasCtx = this.videoCanvas.getContext('2d');
+        canvasCtx.clearRect(0, 0, this.videoCanvas.width, this.videoCanvas.height);
+        if( this.originalLandmarks && this.show2DLandmarksVideo ) {
+            const offset = this.video.clientHeight/ this.video.videoHeight;
+            this.videoCanvas.height = this.video.clientHeight;
+            this.videoCanvas.width =  this.video.videoWidth*offset;
+            const landmarks = this.originalLandmarks[0].landmarks;
+            if(landmarks) {
+            
+                this.drawingVideoUtils.drawConnectors( landmarks, HandLandmarker.HAND_CONNECTIONS, {color: '#1a2025', lineWidth: 4}); //'#00FF00'
+                this.drawingVideoUtils.drawLandmarks( landmarks, {color: this.referenceColor , fillColor: this.referenceColor, lineWidth: 2}); //'#00FF00'
+            }
+        }
+    }
     // Waits until delayedResizeTime to actually resize webGL. New calls reset timeout. To avoid slow resizing and crashes.
     delayedResize( width, height ) {
         if ( this.delayedResizeID ) {
@@ -729,16 +826,8 @@ class App {
         const canvasCtx = this.characterCanvas.getContext('2d');
         canvasCtx.clearRect(0, 0, this.characterCanvas.width, this.characterCanvas.height);
         
-        if( this.originalLandmarks ) {
-            const offset = this.video.clientHeight/ this.video.videoHeight;
-            this.videoCanvas.height = this.video.clientHeight;
-            this.videoCanvas.width =  this.video.videoWidth*offset;
-            const landmarks = this.originalLandmarks[0].landmarks;
-            if(landmarks) {
-         
-                this.drawingVideoUtils.drawConnectors( landmarks, HandLandmarker.HAND_CONNECTIONS, {color: '#1a2025', lineWidth: 4}); //'#00FF00'
-                this.drawingVideoUtils.drawLandmarks( landmarks, {color: this.referenceColor , fillColor: this.referenceColor, lineWidth: 2}); //'#00FF00'
-            }
+        if(this.show2DLandmarksVideo) {
+            this.draw2DLandmarksVideo();
         }
     }
 
