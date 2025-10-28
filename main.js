@@ -8,7 +8,10 @@ import { DrawingUtils, HandLandmarker, PoseLandmarker, FilesetResolver} from 'ht
 
 import { transformLandmarks, flipLandmarks, scoreLandmarks, scoreToColor } from './js/feedbackHelper.js'
 import { TrajectoriesHelper } from './js/trajectoriesHelper.js'
-
+import { Visualizer } from './js/visualizer.js';
+import Stats from 'https://cdnjs.cloudflare.com/ajax/libs/stats.js/r17/Stats.min.js'
+const stats = Stats()
+document.body.appendChild(stats.dom)
 let runningMode = "IMAGE";
 
 // const avatars = {
@@ -34,6 +37,7 @@ const avatars = [
 class App {
     constructor() {
 
+        this.mode = App.modes.VIDEO;
         // Mapping data
         this.animationMap = null;
         this.characters = avatars;
@@ -87,7 +91,9 @@ class App {
 
         this.camera = this.performs.cameras[this.performs.camera].clone();
 
-        
+        this.prevBodyLandmarks = [];
+        this.prevHandsLandmarks = [];
+        this.visualizer = new Visualizer();
         window.addEventListener( 'resize', this.onWindowResize.bind(this) );
     }
 
@@ -104,7 +110,7 @@ class App {
         }
 
         
-        this.assetData = [  { id: "Characters", icon: "PersonStanding", type: "folder", children: avatars }, { id: "Videos", icon: "Film", type: "folder", children: this.animationsMap.data, closed: true }];
+        this.assetData = [  { id: "Characters", icon: "PersonStanding", type: "folder", children: avatars }, { id: "Videos", icon: "Film", type: "folder", children: this.animationsMap.data, closed: true }, {id: "Webcam", type: "", preview: "https://icons.iconarchive.com/icons/cornmanthe3rd/plex/512/System-webcam-icon.png"}];
         // for(let name in this.animationsMap) {
         //    this.assetData.push( { id: name, type: "video", src: `https://catsl.eelvex.net/static/vid/teacher-${name}.mp4` }); //`https://catsl.eelvex.net/static/vid/teacher-${name}.mp4` //"teacher-video-Ψ.mp4"
         // }
@@ -118,7 +124,6 @@ class App {
         this.drawingCharacterUtils = new DrawingUtils( this.characterCanvas.getContext("2d") );
 
         this.delayedResize(this.characterCanvas.parentElement.clientWidth, this.characterCanvas.parentElement.clientHeight);
-
     }
 
     async createGUI() {
@@ -262,6 +267,11 @@ class App {
         this.assetView.load( this.assetData, async ( e ) => {
             switch( e.type ) {
                 case LX.AssetViewEvent.ASSET_SELECTED:
+                    if(e.item.id == "Webcam") {
+                        this.mode = App.modes.CAMERA;
+                        
+                        this.prepareWebcamRecording();
+                    }
                     console.log("selected")
                     break;
                 case LX.AssetViewEvent.ASSET_DELETED:
@@ -763,10 +773,10 @@ class App {
     }
 
     async initMediapipe () {
-        const vision = await FilesetResolver.forVisionTasks( "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm" );
+        const vision = await FilesetResolver.forVisionTasks( "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm" );
         this.handLandmarker = await HandLandmarker.createFromOptions(vision, {
             baseOptions: {
-                modelAssetPath: `https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task`,
+                modelAssetPath: "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task",
                 delegate: "GPU"
             },
             runningMode: runningMode,
@@ -777,7 +787,7 @@ class App {
             vision,
             {
                 baseOptions: {
-                    modelAssetPath: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task",
+                    modelAssetPath: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/latest/pose_landmarker_full.task",
                     delegate:"GPU"
                 },
                 runningMode: runningMode//"VIDEO"//runningMode,
@@ -785,6 +795,136 @@ class App {
             // minPosePresenceConfidence: 0.001,
             // minPoseDetectionConfidence: 0.001
         });
+    }
+
+    //   onBeginCapture() {
+    //     const on_error = (err) => {
+    //         console.log("capture error")
+    //     }
+
+    //     MediaPipe.start(true, (landmarks) => {
+    //         // on results
+    //         this.visualizer.buildPose(landmarks);
+    //     },
+    //     (detections) => {
+    //         // on results
+    //         this.visualizer.processDetections(detections);
+    //     }
+    //     );
+    // }
+
+        /**
+     * @description Set the webcam stream to the video element and create the mediarecorder, enables mediapipe. Called from processWebcam() and on redo the capture.
+    */
+    async prepareWebcamRecording() {
+
+        // this.createCaptureArea();
+        // this.enable();
+
+        const constraints = { video: true, audio: false, width: 1280, height: 720 };
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        
+        const inputVideo = this.video; // this video will hold the camera stream
+        const canvasVideo = this.videoCanvas; // this canvas will output image, landmarks (and edges)
+
+        if( !inputVideo.srcObject ) {
+            inputVideo.srcObject = stream;
+        }
+
+        inputVideo.onloadedmetadata = ( async (e) => {
+
+            inputVideo.play();
+            console.log(inputVideo.videoWidth)
+            console.log(inputVideo.videoHeight);
+            
+            const aspect = inputVideo.videoWidth / inputVideo.videoHeight;
+            
+            const height = inputVideo.parentElement.clientHeight;
+            const width = height * aspect;
+
+            // canvasVideo.width  =  recordedVideo.style.width = width;
+            // canvasVideo.height =  recordedVideo.style.height = height;
+            await this.initMediapipe();
+            await this.visualizer.init(this.performs.scene, this.performs.currentCharacter, PoseLandmarker.POSE_CONNECTIONS, HandLandmarker.HAND_CONNECTIONS);
+
+            this.mediapipeOnlineEnabler = true;
+            
+            this.video.classList.remove("hidden");
+            // const videoAspect =  this.video.clientHeight / this.video.videoHeight;
+            const offset = this.video.clientHeight/ this.video.videoHeight;
+            this.videoCanvas.height = this.video.clientHeight;
+            this.videoCanvas.width =  this.video.videoWidth*offset;
+            this.videoCanvas.classList.remove("hidden");
+            
+            $('#loading').fadeOut();
+            $('#text').innerText = "Loading character..."
+            
+            // Hide info
+            document.getElementById("select-video").classList.add("hidden");
+            requestAnimationFrame(this.animate.bind(this));
+
+        } );
+            
+    }
+
+    /**
+     * 
+     * @param {array of Mediapipe landmarks} inLandmarks each entry of the array is a frame containing an object with information about the mediapipe output { FLM, PLM, LLM, RLM, PWLM, LWLM, RWLM }
+     * @returns {array of Mediapipe landmarks} same heriarchy as inLandmarks but smoothed
+     */
+    smoothMediapipeLandmarks( inLandmarks, lambda, p  ){
+        let outLandmarks = JSON.parse(JSON.stringify(inLandmarks));
+
+        let arrayToSmoothX = new Array( inLandmarks.length );
+        let arrayToSmoothY = new Array( inLandmarks.length );
+        let arrayToSmoothZ = new Array( inLandmarks.length );
+ 
+        const initialValues = inLandmarks[0];
+       
+        for(let l = 0; l < initialValues.length; ++l ){
+            
+            //for each frame get the value to smooth (or a default one)
+            let values = initialValues[l]; // default values in case there is no landmark estimation for a frame
+            for( let f = 0; f < inLandmarks.length; ++f ){
+
+                if (outLandmarks[f] ){
+                    values = outLandmarks[f][l];  // found a valid landmark, set it as default
+                }
+                arrayToSmoothX[f] = values.x;
+                arrayToSmoothY[f] = values.y;
+                arrayToSmoothZ[f] = values.z;
+            }
+
+            const smoothX = whittakerAsymmetricSmoothing(arrayToSmoothX, lambda, p);
+            const smoothY = whittakerAsymmetricSmoothing(arrayToSmoothY, lambda, p);
+            const smoothZ = whittakerAsymmetricSmoothing(arrayToSmoothZ, lambda, p);
+
+            //for each frame, set smoothed values
+            for( let f = 0; f < inLandmarks.length; ++f ){
+                if (outLandmarks[f]){
+                    outLandmarks[f][l].x = smoothX[f];
+                    outLandmarks[f][l].y = smoothY[f];
+                    outLandmarks[f][l].z = smoothZ[f];
+
+                    // if(f == inLandmarks.length-1) {
+                    //     // light prediction (avoids delay)
+                    //     const smooth = new THREE.Vector3(smoothX[f], smoothY[f], smoothZ[f]);
+                    //     const last = new THREE.Vector3(inLandmarks[inLandmarks.length - 1][l].x, inLandmarks[inLandmarks.length - 1][l].y, inLandmarks[inLandmarks.length - 1][l].z);
+                    //     const prev = new THREE.Vector3(inLandmarks[inLandmarks.length - 2][l].x, inLandmarks[inLandmarks.length - 2][l].y, inLandmarks[inLandmarks.length - 2][l].z);
+                       
+                    //     const velocity = last.clone().sub(prev);
+                    //     const predicted = smooth.clone().add(velocity.multiplyScalar(0.5));
+                    //     outLandmarks[f][l].x = predicted.x;
+                    //     outLandmarks[f][l].y = predicted.y;
+                    //     outLandmarks[f][l].z = predicted.z;
+                    // }
+                }
+
+            } 
+        } // end of landmark
+
+
+        return outLandmarks;
     }
 
     draw2DLandmarksVideo() {
@@ -833,99 +973,161 @@ class App {
 
     async animate( dt ) {
 
-        this.mediapipeScene.leftHandPoints.visible = false;
-        this.mediapipeScene.rightHandPoints.visible = false;
+        if( this.mode == App.modes.VIDEO ) {
+            this.mediapipeScene.leftHandPoints.visible = false;
+            this.mediapipeScene.rightHandPoints.visible = false;
 
-        const canvasCtx = this.characterCanvas.getContext('2d');
-        canvasCtx.clearRect(0, 0, this.characterCanvas.width, this.characterCanvas.height);
+            const canvasCtx = this.characterCanvas.getContext('2d');
+            canvasCtx.clearRect(0, 0, this.characterCanvas.width, this.characterCanvas.height);
 
-        if( this.handLandmarker && ( this.show2DLandmarksAvatar || this.show3DLandmarks )) {
+            if( this.handLandmarker && ( this.show2DLandmarksAvatar || this.show3DLandmarks )) {
 
-            // Convert 3D canvas ( three scene ) into image to send it to Mediapipe
-            const bitmap = await createImageBitmap(this.performs.renderer.domElement);
+                // Convert 3D canvas ( three scene ) into image to send it to Mediapipe
+                const bitmap = await createImageBitmap(this.performs.renderer.domElement);
 
-            const detectionsHand = this.handLandmarker.detect(bitmap);
-            bitmap.close();
-            if (detectionsHand.landmarks.length) {
-                const originalLandmarks = this.originalLandmarks ? this.originalLandmarks[0].landmarks : null;
-                const originalData = this.originalLandmarks ? this.originalLandmarks[0].handedness : "";
-                let index = originalData.indexOf("index=") + 6;
-                index = Number(originalData[index]);
-                
-                if(  this.show2DLandmarksAvatar ) {
-                    // Draw 2D landmarks
-                    for (let j = 0; j < detectionsHand.landmarks.length; j++) {
-                        const detectedLandmarks = detectionsHand.landmarks[j];
-                    // for (const detectedLandmarks of detectionsHand.landmarks) {
-                        let smoothingFactor = 1;
-                        if (this.prevLandmarks) {
-                            for (let i = 0; i < detectedLandmarks.length; i++) {
-                                detectedLandmarks[i].x = smoothingFactor * detectedLandmarks[i].x + (1 - smoothingFactor) * this.prevLandmarks[i].x;
-                                detectedLandmarks[i].y = smoothingFactor * detectedLandmarks[i].y + (1 - smoothingFactor) * this.prevLandmarks[i].y;
+                const detectionsHand = this.handLandmarker.detect(bitmap);
+                bitmap.close();
+                if (detectionsHand.landmarks.length) {
+                    const originalLandmarks = this.originalLandmarks ? this.originalLandmarks[0].landmarks : null;
+                    const originalData = this.originalLandmarks ? this.originalLandmarks[0].handedness : "";
+                    let index = originalData.indexOf("index=") + 6;
+                    index = Number(originalData[index]);
+                    
+                    if(  this.show2DLandmarksAvatar ) {
+                        // Draw 2D landmarks
+                        for (let j = 0; j < detectionsHand.landmarks.length; j++) {
+                            const detectedLandmarks = detectionsHand.landmarks[j];
+                        // for (const detectedLandmarks of detectionsHand.landmarks) {
+                            let smoothingFactor = 1;
+                            if (this.prevLandmarks) {
+                                for (let i = 0; i < detectedLandmarks.length; i++) {
+                                    detectedLandmarks[i].x = smoothingFactor * detectedLandmarks[i].x + (1 - smoothingFactor) * this.prevLandmarks[i].x;
+                                    detectedLandmarks[i].y = smoothingFactor * detectedLandmarks[i].y + (1 - smoothingFactor) * this.prevLandmarks[i].y;
+                                }
                             }
+        
+                            let color = 'red'; //this.detectedColor;
+                            if(index == detectionsHand.handedness[j][0].index) {
+        
+                                let transformed = transformLandmarks(flipLandmarks(originalLandmarks), detectedLandmarks);
+                                const score = scoreLandmarks(transformed, detectedLandmarks);
+                                color = scoreToColor(score);
+                                this.drawingCharacterUtils.drawConnectors(transformed, HandLandmarker.HAND_CONNECTIONS, { color:  '#1a2025', lineWidth: 2 });
+                                this.drawingCharacterUtils.drawLandmarks(transformed, { color: this.referenceColor, lineWidth: 2 });
+                            }
+                            this.prevLandmarks = detectedLandmarks;
+                            this.drawingCharacterUtils.drawConnectors(detectedLandmarks, HandLandmarker.HAND_CONNECTIONS, { color: "#f0f0f0", lineWidth: 2 });
+                            this.drawingCharacterUtils.drawLandmarks(detectedLandmarks, { color: color, lineWidth: 2 });
                         }
-    
-                        let color = 'red'; //this.detectedColor;
-                        if(index == detectionsHand.handedness[j][0].index) {
-    
-                            let transformed = transformLandmarks(flipLandmarks(originalLandmarks), detectedLandmarks);
-                            const score = scoreLandmarks(transformed, detectedLandmarks);
-                            color = scoreToColor(score);
-                            this.drawingCharacterUtils.drawConnectors(transformed, HandLandmarker.HAND_CONNECTIONS, { color:  '#1a2025', lineWidth: 2 });
-                            this.drawingCharacterUtils.drawLandmarks(transformed, { color: this.referenceColor, lineWidth: 2 });
-                        }
-                        this.prevLandmarks = detectedLandmarks;
-                        this.drawingCharacterUtils.drawConnectors(detectedLandmarks, HandLandmarker.HAND_CONNECTIONS, { color: "#f0f0f0", lineWidth: 2 });
-                        this.drawingCharacterUtils.drawLandmarks(detectedLandmarks, { color: color, lineWidth: 2 });
                     }
-                }
 
-                if( this.show3DLandmarks ) {
-                    // Draw 3D landmarks (update points positions)
-                    for (let j = 0; j < detectionsHand.worldLandmarks.length; j++ ) {
-                        const hand = detectionsHand.handedness[j][0].categoryName;
-                        let hand3D = null;
-                        if(hand == "Right") {
-                            hand3D = this.performs.scene.getObjectByName(`mixamorig_LeftHand`) || this.performs.scene.getObjectByName(`LeftHand`);
-                        }
-                        else {
-                            hand3D = this.performs.scene.getObjectByName(`mixamorig_RightHand`) || this.performs.scene.getObjectByName(`RightHand`);
-                        }
-
-                        let pos = new THREE.Vector3();
-                        if(hand3D) {
-                            hand3D.getWorldPosition(pos);
-                        }
-
-                        const detectedLandmarks = detectionsHand.worldLandmarks[j];
-                        for (let i = 0; i < detectedLandmarks.length; i++) {
-                            if(hand == "Left") {
-                                this.mediapipeScene.leftHandPoints.visible = true;
-                                this.mediapipeScene.leftHandPoints.children[i].material.color.set(this.detectedColor);
-                                this.mediapipeScene.leftHandPoints.children[i].position.x = pos.x +(detectedLandmarks[i].x - detectedLandmarks[0].x);
-                                this.mediapipeScene.leftHandPoints.children[i].position.y = pos.y -(detectedLandmarks[i].y - detectedLandmarks[0].y);
-                                this.mediapipeScene.leftHandPoints.children[i].position.z = pos.z -(detectedLandmarks[i].z - detectedLandmarks[0].z);
+                    if( this.show3DLandmarks ) {
+                        // Draw 3D landmarks (update points positions)
+                        for (let j = 0; j < detectionsHand.worldLandmarks.length; j++ ) {
+                            const hand = detectionsHand.handedness[j][0].categoryName;
+                            let hand3D = null;
+                            if(hand == "Right") {
+                                hand3D = this.performs.scene.getObjectByName(`mixamorig_LeftHand`) || this.performs.scene.getObjectByName(`LeftHand`);
                             }
                             else {
-                                this.mediapipeScene.rightHandPoints.visible = true;
-                                this.mediapipeScene.rightHandPoints.children[i].material.color.set(this.detectedColor);
-                                this.mediapipeScene.rightHandPoints.children[i].position.x = pos.x +(detectedLandmarks[i].x - detectedLandmarks[0].x);
-                                this.mediapipeScene.rightHandPoints.children[i].position.y = pos.y -(detectedLandmarks[i].y - detectedLandmarks[0].y);
-                                this.mediapipeScene.rightHandPoints.children[i].position.z = pos.z -(detectedLandmarks[i].z - detectedLandmarks[0].z);
+                                hand3D = this.performs.scene.getObjectByName(`mixamorig_RightHand`) || this.performs.scene.getObjectByName(`RightHand`);
+                            }
+
+                            let pos = new THREE.Vector3();
+                            if(hand3D) {
+                                hand3D.getWorldPosition(pos);
+                            }
+
+                            const detectedLandmarks = detectionsHand.worldLandmarks[j];
+                            for (let i = 0; i < detectedLandmarks.length; i++) {
+                                if(hand == "Left") {
+                                    this.mediapipeScene.leftHandPoints.visible = true;
+                                    this.mediapipeScene.leftHandPoints.children[i].material.color.set(this.detectedColor);
+                                    this.mediapipeScene.leftHandPoints.children[i].position.x = pos.x +(detectedLandmarks[i].x - detectedLandmarks[0].x);
+                                    this.mediapipeScene.leftHandPoints.children[i].position.y = pos.y -(detectedLandmarks[i].y - detectedLandmarks[0].y);
+                                    this.mediapipeScene.leftHandPoints.children[i].position.z = pos.z -(detectedLandmarks[i].z - detectedLandmarks[0].z);
+                                }
+                                else {
+                                    this.mediapipeScene.rightHandPoints.visible = true;
+                                    this.mediapipeScene.rightHandPoints.children[i].material.color.set(this.detectedColor);
+                                    this.mediapipeScene.rightHandPoints.children[i].position.x = pos.x +(detectedLandmarks[i].x - detectedLandmarks[0].x);
+                                    this.mediapipeScene.rightHandPoints.children[i].position.y = pos.y -(detectedLandmarks[i].y - detectedLandmarks[0].y);
+                                    this.mediapipeScene.rightHandPoints.children[i].position.z = pos.z -(detectedLandmarks[i].z - detectedLandmarks[0].z);
+                                }
                             }
                         }
                     }
                 }
+
+                this.mediapipeScene.renderer.render(this.mediapipeScene.scene, this.performs.cameras[this.performs.camera]);
             }
 
-            this.mediapipeScene.renderer.render(this.mediapipeScene.scene, this.performs.cameras[this.performs.camera]);
+            this.trajectoriesHelper.updateTrajectories( this.window.start, this.window.end );
         }
+        else if( this.handLandmarker && this.poseLandmarker && this.mode == App.modes.CAMERA ) {
+            // Convert 3D canvas ( three scene ) into image to send it to Mediapipe
+            const bitmap = await createImageBitmap(this.video);
 
-        this.trajectoriesHelper.updateTrajectories( this.window.start, this.window.end );
+            const detectionsHands = this.handLandmarker.detect(bitmap);
+            const detectionsPose = this.poseLandmarker.detect(bitmap);
+            bitmap.close();
+            const detections = {
+                body:{l:[], w:[]},
+                leftHand:{l:[], w:[]},
+                rightHand:{l:[], w:[]},
+                retargetLandmarks: false,
+            }
+            if( detectionsPose.worldLandmarks.length && detectionsPose.worldLandmarks[0]) {
+                let land = detectionsPose.worldLandmarks[0];
+                if(this.prevBodyLandmarks.length == 15) {
+                    this.prevBodyLandmarks = this.prevBodyLandmarks.slice(1);
+                }
+                this.prevBodyLandmarks.push(detectionsPose.worldLandmarks[0]);
+                if(this.prevBodyLandmarks.length ==15) {
+                    land = this.smoothMediapipeLandmarks(this.prevBodyLandmarks, 2000, 0.5);
+                    land = land[this.prevBodyLandmarks.length-1];
+                }
+                detections.body.l = detectionsPose.landmarks[0];
+                detections.body.w = land//detectionsPose.worldLandmarks[0];
+            }
+
+            if( detectionsHands.worldLandmarks.length ) {
+                let done = 0x03; // bit0 left, bit1 right
+                for ( let i = 0; i < detectionsHands.handednesses.length; ++i ){
+                    let h = detectionsHands.handednesses[i][0];
+                    let dst = detections.rightHand;
+                    if ( h.categoryName == 'Left' ){
+                        dst = detections.leftHand
+                        done &= 0xfe;
+                    }else{
+                        done &= 0xfd;
+                    }
+                    let land = detectionsHands.worldLandmarks[0];
+                    if(this.prevHandsLandmarks.length == 15) {
+                        this.prevHandsLandmarks = this.prevHandsLandmarks.slice(1);
+                    }
+                    this.prevHandsLandmarks.push(detectionsHands.worldLandmarks[0]);
+                    if(this.prevHandsLandmarks.length ==15) {
+                        land = this.smoothMediapipeLandmarks(this.prevHandsLandmarks, 4000, 0.05);
+                        land = land[this.prevHandsLandmarks.length-1];
+                    }
+                    dst.l = detectionsHands.landmarks[ i ]
+                    dst.w = detectionsHands.worldLandmarks[ i ]
+                }
+            }
+            this.visualizer.processDetections(detections, PoseLandmarker.POSE_CONNECTIONS, HandLandmarker.HAND_CONNECTIONS);
+            this.visualizer.animate();
+        }
+        else {
+        }
+        
+
+        stats.update()
 
         requestAnimationFrame(this.animate.bind(this));
     }
 }
+App.modes = {VIDEO:0, CAMERA:1};
 
 const app = new App();
 
@@ -1089,3 +1291,59 @@ class Window {
 
 }
 window.global = {app};
+
+
+/**
+ * Asymmetric Whittaker Smoothing
+ * @param {Array<number>} y - Original data series
+ * @param {number} lambda - Smoothness (100 - 1e7 usual range)
+ * @param {number} p - Asymmetry parameter (0-1), typical 0.001 - 0.1
+ * @returns {Array<number>} Smoothed data
+ */
+function whittakerAsymmetricSmoothing(values, lambda = 1000, p = 0.001) {
+        const m = values.length;
+        const w = new Array(m).fill(1);
+        const z = [...values];
+
+        for (let iter = 0; iter < 6; iter++) { // less iterations for real-time
+            const W = z.map((_, i) => w[i] * values[i]);
+            const A = Array.from({ length: m }, () => new Array(m).fill(0));
+
+            // diagonales
+            for (let i = 0; i < m; i++) A[i][i] = w[i] + lambda * 6;
+
+            // second-derivative penalization
+            for (let i = 0; i < m - 1; i++) {
+                A[i][i + 1] -= lambda * 4;
+                A[i + 1][i] -= lambda * 4;
+            }
+            for (let i = 0; i < m - 2; i++) {
+                A[i][i + 2] += lambda;
+                A[i + 2][i] += lambda;
+            }
+
+            // resolve Ax = W (remove fast gaussian)
+            for (let i = 0; i < m; i++) {
+                for (let j = i + 1; j < m; j++) {
+                    const factor = A[j][i] / A[i][i];
+                    for (let k = i; k < m; k++) {
+                        A[j][k] -= factor * A[i][k];
+                    }
+                    W[j] -= factor * W[i];
+                }
+            }
+            for (let i = m - 1; i >= 0; i--) {
+                for (let j = i + 1; j < m; j++) {
+                    W[i] -= A[i][j] * z[j];
+                }
+                z[i] = W[i] / A[i][i];
+            }
+
+            // asymmetry
+            for (let i = 0; i < m; i++) {
+                w[i] = (values[i] > z[i]) ? p : (1 - p);
+            }
+        }
+
+        return z;
+}
