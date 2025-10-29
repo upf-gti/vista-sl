@@ -3,6 +3,8 @@ import { BVHLoader } from 'three/addons/loaders/BVHLoader.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { AnimationRetargeting } from './retargeting.js'
 
+import * as math from 'mathjs';
+
 function getTwistQuaternion( q, normAxis, outTwist ){
     let dot =  q.x * normAxis.x + q.y * normAxis.y + q.z * normAxis.z;
     outTwist.set( dot * normAxis.x, dot * normAxis.y, dot * normAxis.z, q.w )
@@ -44,7 +46,7 @@ function forceBindPoseQuats( skeleton, skipRoot = false ){
 }
 
 class Visualizer {
-    constructor() {
+    constructor( frameCount ) {
 
         this.elapsedTime = 0; // clock is ok but might need more time control to dinamicaly change signing speed
         this.clock = new THREE.Clock();
@@ -68,6 +70,14 @@ class Visualizer {
         this.leftHandLineSegments = null;
         this.rightHandLineSegments = null;
 
+        this.prevBodyLandmarks = [];
+        this.prevLeftHandLandmarks = [];
+        this.prevRightHandLandmarks = [];
+
+        this.rotationHistory = {};
+        this.smoothFrameCount = frameCount || 10;
+        this.lambda = 100;
+        this.p = 0.5;
     }
 
     async init( scene, character, POSE_CONNECTIONS, HAND_CONNECTIONS ) {
@@ -98,21 +108,21 @@ class Visualizer {
             this.scene.add( this.pointCloudGroup );
             const geometry = new THREE.SphereGeometry(0.005, 16, 16);
             
-            let material = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+            let material = new THREE.MeshBasicMaterial({ color: 0xff0000, depthTest: false });
             for( let i = 0; i< 33; ++i ){
                 let g = new THREE.Mesh( geometry, material );
                 this.pointCloudGroup.add(g)
                 this.bodyPoints.push(g)
             }
             
-            material = new THREE.MeshBasicMaterial({ color: 0x0000ff });
+            material = new THREE.MeshBasicMaterial({ color: 0x0000ff, depthTest: false });
             for( let i = 0; i< 21; ++i ){
                 let g = new THREE.Mesh( geometry, material );
                 this.pointCloudGroup.add(g)
                 this.leftHandPoints.push(g)
             }  
             
-            material = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+            material = new THREE.MeshBasicMaterial({ color: 0x00ff00, depthTest: false });
             for( let i = 0; i< 21; ++i ){
                 let g = new THREE.Mesh( geometry, material );
                 this.pointCloudGroup.add(g)
@@ -121,7 +131,7 @@ class Visualizer {
 
 
             // POSE_CONNECTIONS & HAND_CONNECTIONS come from mediapipe drawutils import
-            let lineMaterial = new THREE.LineBasicMaterial( { color: 0xff0000 } );
+            let lineMaterial = new THREE.LineBasicMaterial( { color: 0xff0000, depthTest: false } );
             const points = [ new THREE.Vector3(0,0,0), new THREE.Vector3(1,1,1) ];
             for( let i = 0; i < POSE_CONNECTIONS.length; ++i ){
                 const lineGeometry = new THREE.BufferGeometry().setFromPoints( points );
@@ -130,8 +140,8 @@ class Visualizer {
                 this.pointCloudGroup.add( line );
             }
             
-            let lineMaterialRight = new THREE.LineBasicMaterial( { color: 0x00ff00 } );
-            let lineMaterialLeft = new THREE.LineBasicMaterial( { color: 0x0000ff } );
+            let lineMaterialRight = new THREE.LineBasicMaterial( { color: 0x00ff00, depthTest: false } );
+            let lineMaterialLeft = new THREE.LineBasicMaterial( { color: 0x0000ff, depthTest: false } );
             for( let i = 0; i < HAND_CONNECTIONS.length; ++i ){
                 let lineGeometry = new THREE.BufferGeometry().setFromPoints( points );
                 let line = new THREE.Line( lineGeometry, lineMaterialRight );
@@ -245,19 +255,46 @@ class Visualizer {
         qq.normalize();
         boneHips.quaternion.multiply(qq);
 
+        if (!this.rotationHistory["hips"]) this.rotationHistory["hips"] = [];
+        this.rotationHistory["hips"].push(boneHips.quaternion); // localRotations["hips"] = THREE.Quaternion
+        while (this.rotationHistory["hips"].length >= this.smoothFrameCount) this.rotationHistory["hips"].shift();
+
+        let smoothedLocalRotation = this.smoothQuaternionsByJointLocal(this.rotationHistory["hips"], this.lambda, this.p);
+        boneHips.quaternion.copy(smoothedLocalRotation);
+
         // move qq from left_spine0_Quat to right_spine_Quat.  
         // Q = (hips * qq) * spine0Quat = hips * (qq * spine0Quat) = hips * spine0Quat * qq'
         qq.multiply( boneSpine0.quaternion ).premultiply( tempQuat.copy( boneSpine0.quaternion ).invert() );
         boneSpine0.quaternion.multiply( qq );
 
+        if (!this.rotationHistory["spine0"]) this.rotationHistory["spine0"] = [];
+        this.rotationHistory["spine0"].push(boneSpine0.quaternion); // localRotations["spine0"] = THREE.Quaternion
+        while (this.rotationHistory["spine0"].length >= this.smoothFrameCount) this.rotationHistory["spine0"].shift();
+
+        smoothedLocalRotation = this.smoothQuaternionsByJointLocal(this.rotationHistory["spine0"], this.lambda, this.p);
+        boneSpine0.quaternion.copy(smoothedLocalRotation);
+
         // Q = (spine0Quat * qq') * spine1Quat = spine0Quat * (qq' * spine1Quat) = spine0Quat * spine1Quat * qq''
         qq.multiply( boneSpine1.quaternion ).premultiply( tempQuat.copy( boneSpine1.quaternion ).invert() );
         boneSpine1.quaternion.multiply( qq );
 
+        if (!this.rotationHistory["spine1"]) this.rotationHistory["spine1"] = [];
+        this.rotationHistory["spine1"].push(boneSpine1.quaternion); // localRotations["spine1"] = THREE.Quaternion
+        while (this.rotationHistory["spine1"].length >= this.smoothFrameCount) this.rotationHistory["spine1"].shift();
+
+        smoothedLocalRotation = this.smoothQuaternionsByJointLocal(this.rotationHistory["spine1"], this.lambda, this.p);
+        boneSpine1.quaternion.copy(smoothedLocalRotation);
+        
         // // Q = (spine1Quat * qq'') * spine2Quat = spine1Quat * (qq'' * spine2Quat) = spine1Quat * spine2Quat * qq'''
         // qq.multiply( boneSpine2.quaternion ).premultiply( tempQuat.copy( boneSpine2.quaternion ).invert() );
         // boneSpine2.quaternion.multiply( qq );
         boneSpine2.quaternion.premultiply( qq );
+        
+        if (!this.rotationHistory["spine2"]) this.rotationHistory["spine2"] = [];
+        this.rotationHistory["spine2"].push(boneSpine2.quaternion); // localRotations["spine2"] = THREE.Quaternion
+        while (this.rotationHistory["spine2"].length >= this.smoothFrameCount) this.rotationHistory["spine2"].shift();
+        smoothedLocalRotation = this.smoothQuaternionsByJointLocal(this.rotationHistory["spine2"], this.lambda, this.p);
+        boneSpine2.quaternion.copy(smoothedLocalRotation);
     }
 
     computeQuatHead( skeleton, bodyLandmarks ){
@@ -302,6 +339,13 @@ class Visualizer {
         angle -= Math.PI/2;
         qq.setFromAxisAngle( headBoneDir, angle ); // angle does not which space is in
         boneHead.quaternion.multiply( qq ).normalize();
+
+        if (!this.rotationHistory["head"]) this.rotationHistory["head"] = [];
+        this.rotationHistory["head"].push(boneHead.quaternion); // localRotations["head"] = THREE.Quaternion
+        while (this.rotationHistory["head"].length >= this.smoothFrameCount) this.rotationHistory["head"].shift();
+
+        let smoothedLocalRotation = this.smoothQuaternionsByJointLocal(this.rotationHistory["head"], this.lambda, this.p);
+        boneHead.quaternion.copy(smoothedLocalRotation);
     }
 
     computeQuatArm( skeleton, bodyLandmarks, isLeft = false ){
@@ -340,6 +384,14 @@ class Visualizer {
             boneSrc.quaternion.multiply( qq );
             getTwistQuaternion( qq, dirBone, twist ); // remove undesired twist from bone
             boneSrc.quaternion.multiply( twist.invert() ).normalize();
+
+            const boneName = `arm${isLeft? "Left" : "Right"}${i}`;
+            if (!this.rotationHistory[boneName]) this.rotationHistory[boneName] = [];
+            this.rotationHistory[boneName].push(boneSrc.quaternion); // localRotations[boneName] = THREE.Quaternion
+            while (this.rotationHistory[boneName].length >= this.smoothFrameCount) this.rotationHistory[boneName].shift();
+
+            let smoothedLocalRotation = this.smoothQuaternionsByJointLocal(this.rotationHistory[boneName], this.lambda, this.p);
+            boneSrc.quaternion.copy(smoothedLocalRotation);
         }
     }
 
@@ -381,6 +433,14 @@ class Visualizer {
         qq.setFromUnitVectors( palmDirBone, palmDirPred ).normalize();
         boneHand.quaternion.multiply( qq ).normalize();
         //console.log(boneHand.rotation._x*180/Math.PI, boneHand.rotation._y*180/Math.PI, boneHand.rotation._z*180/Math.PI)
+        
+        const boneName = `hand${isLeft? "Left" : "Right"}`;
+        if (!this.rotationHistory[boneName]) this.rotationHistory[boneName] = [];
+        this.rotationHistory[boneName].push(boneHand.quaternion); // localRotations[boneName] = THREE.Quaternion
+        while (this.rotationHistory[boneName].length >= this.smoothFrameCount) this.rotationHistory[boneName].shift();
+
+        let smoothedLocalRotation = this.smoothQuaternionsByJointLocal(this.rotationHistory[boneName], this.lambda, this.p);
+        boneHand.quaternion.copy(smoothedLocalRotation);
     }
 
     computeQuatPhalange( skeleton, handLandmarks, isLeft = false ){
@@ -551,6 +611,14 @@ class Visualizer {
                 rot.setFromUnitVectors( phalange_p, v_phalange );
                 getTwistQuaternion( rot, phalange_p, twist ); // remove undesired twist from phalanges
                 boneSrc.quaternion.multiply( rot ).multiply( twist.invert() ).normalize();
+
+                const boneName = `phalange${isLeft? "Left" : "Right"}Finger${f}_${i}`;
+                if (!this.rotationHistory[boneName]) this.rotationHistory[boneName] = [];
+                this.rotationHistory[boneName].push(boneSrc.quaternion); // localRotations[boneName] = THREE.Quaternion
+                while (this.rotationHistory[boneName].length >= this.smoothFrameCount) this.rotationHistory[boneName].shift();
+
+                let smoothedLocalRotation = this.smoothQuaternionsByJointLocal(this.rotationHistory[boneName], this.lambda, this.p);
+                boneSrc.quaternion.copy(smoothedLocalRotation);
             }// end of phalange for
 
             // add lateral deviation for fingers, only on the base bone. Right now, fingers are all in the plane ( Normal x Forward )
@@ -635,6 +703,429 @@ class Visualizer {
             this.leftHandLines[i].geometry.setFromPoints( [ a,b ] );
         }
     }
+
+    applyHandSmoothingWithAnchor(handHistory, shoulderHistory, smoothFn) {
+        if(handHistory.length !== shoulderHistory.length) return handHistory;
+
+        const wristIndex = 0; // MediaPipe Hands
+        const frameCount = handHistory.length;
+
+        // Wrist and shoulder extraction
+        const wristHistory = handHistory.map(frame => frame[wristIndex]);
+        const shoulderPos = shoulderHistory.map(frame => frame); // world coords
+
+        // Landmarks to wrist relative coords
+        const relativeHistory = handHistory.map((frame, i) =>
+            frame.map(pt => ({
+                x: pt.x - wristHistory[i].x,
+                y: pt.y - wristHistory[i].y,
+                z: pt.z - wristHistory[i].z,
+            }))
+        );
+
+        // Smooth wrist and fingers
+        let fake = wristHistory.map((frame) => [frame]);
+        let smoothedWrist = smoothFn(fake, 100, 0.8, [0]);
+        smoothedWrist = smoothedWrist.map( f => f[0]);
+        
+        const smoothedRelative = smoothFn(relativeHistory,  100, 0.8, [0]);
+
+        const finalFrames = [];
+
+        for(let i = 0; i < frameCount; i++) {
+            const anchorVector = {
+                x: smoothedWrist[i].x - shoulderPos[i].x,
+                y: smoothedWrist[i].y - shoulderPos[i].y,
+                z: smoothedWrist[i].z - shoulderPos[i].z
+            };
+
+            //  Smooth shoulder-wrist distance           
+            const filteredAnchor = smoothFn([[anchorVector]], 100, 0.8, [0])[0][0];
+            // Recompute global wrist coords
+            const correctedWrist = {
+                x: shoulderPos[i].x + filteredAnchor.x,
+                y: shoulderPos[i].y + filteredAnchor.y,
+                z: shoulderPos[i].z + filteredAnchor.z,
+            };
+
+            // Final global landmarks
+            finalFrames.push(smoothedRelative[i].map(pt => ({
+                x: pt.x + correctedWrist.x,
+                y: pt.y + correctedWrist.y,
+                z: pt.z + correctedWrist.z,
+            })));
+        }
+
+        return finalFrames;
+    }
+    /**
+     * 
+     * @param {array of Mediapipe landmarks} inLandmarks each entry of the array is a frame containing an object with information about the mediapipe output { FLM, PLM, LLM, RLM, PWLM, LWLM, RWLM }
+     * @returns {array of Mediapipe landmarks} same heriarchy as inLandmarks but smoothed
+     */
+    smoothMediapipeLandmarks(history, lambda = 2000, p = 0.5, rootIndices = [23, 24]) {
+        if (!history.length || !history[0].length) return history;
+
+        // Convert history to THREE.Vector3 frames
+        const frames = history.map(frame =>
+            frame.map(lm => new THREE.Vector3(lm.x, lm.y, lm.z))
+        );
+
+        // Compute root per frame (pelvis or wrist avg)
+        const rootHistory = frames.map(lms => {
+            const root = new THREE.Vector3();
+            rootIndices.forEach(i => {
+                const lm = lms[i] || new THREE.Vector3();
+                root.add(lm);
+            });
+            return root.multiplyScalar(1 / rootIndices.length);
+        });
+
+        // Convert to relative motion
+        const relativeHistory = frames.map((lms, i) =>
+            lms.map(lm => lm.clone().sub(rootHistory[i]))
+        );
+
+        // Apply Whittaker to each landmark
+        const filteredRelative = relativeHistory[0].map((_, idx) => {
+            const series = relativeHistory.map(f => f[idx]);
+            return whittakerAsymmetricSmoothing(series, lambda, p);
+        });
+
+        const finalFrameIdx = filteredRelative[0].length - 1;
+        
+        // Smoothed relative pelvis (for global movement)
+        const smoothedRootCur = new THREE.Vector3();
+        rootIndices.forEach(i => {
+            smoothedRootCur.add(
+                filteredRelative[i][finalFrameIdx]
+            );
+        });
+        smoothedRootCur.multiplyScalar(1 / rootIndices.length);
+
+        // Initialize global translation once
+        if (!this.globalTranslation) {
+            this.globalTranslation = new THREE.Vector3();
+            this.prevSmoothedRoot = smoothedRootCur.clone();
+        }
+
+        // Reconstructed global motion
+        const rootDelta = smoothedRootCur.clone().sub(this.prevSmoothedRoot);
+        this.globalTranslation.add(rootDelta);
+        this.prevSmoothedRoot.copy(smoothedRootCur);
+
+        const finalFrames = filteredRelative[0].map( (f, frameIdx) => {
+
+            let landmarks = filteredRelative.map( land => land[frameIdx]);        
+            landmarks = landmarks.map((value, i) => {
+                
+                if(frameIdx == filteredRelative[0].length - 1) {
+                    const smoothedRel = value;
+                    value = smoothedRel.clone().add(this.globalTranslation);
+                }
+                
+                return {
+                    x: value.x,
+                    y: value.y,
+                    z: value.z,
+                    visibility: history[frameIdx][i].visibility
+                };
+            });
+            return landmarks;
+        })
+    
+        return finalFrames;
+    }
+
+    smoothDetections( detections, framesCount = 15 ) {
+        if( detections.body.w.length ) {
+            let land = detections.body.w;
+            while(this.prevBodyLandmarks.length >= framesCount) {
+                this.prevBodyLandmarks.shift();
+            }
+            this.prevBodyLandmarks.push(detections.body.w);
+            if(this.prevBodyLandmarks.length == framesCount) {
+                
+                land = this.smoothMediapipeLandmarks(this.prevBodyLandmarks, 100, 0.5, [23, 24]);
+                land = land[this.prevBodyLandmarks.length-1];
+            }
+
+            detections.body.w = land//detectionsPose.worldLandmarks[0];
+        }
+
+        if( detections.leftHand.w.length ) {
+            let land = detections.leftHand.w;
+            while( this.prevLeftHandLandmarks.length >= framesCount ) {
+                this.prevLeftHandLandmarks.shift();
+            }
+            this.prevLeftHandLandmarks.push(detections.leftHand.w);
+            if( this.prevLeftHandLandmarks.length == framesCount ) {
+                const shoulderHistory = this.prevBodyLandmarks.map(frame => frame[11]); // Hombro izquierdo
+                const smoothedLeft = this.applyHandSmoothingWithAnchor(
+                    this.prevLeftHandLandmarks,
+                    shoulderHistory,
+                    this.smoothMediapipeLandmarks.bind(this)
+                );
+                land = smoothedLeft[smoothedLeft.length - 1];
+            }
+            detections.leftHand.w = land;
+        }
+
+        if( detections.rightHand.w.length ) {
+            let land = detections.rightHand.w;
+            while( this.prevRightHandLandmarks.length >= framesCount ) {
+                this.prevRightHandLandmarks.shift();
+            }
+            this.prevRightHandLandmarks.push(detections.rightHand.w);
+            if( this.prevRightHandLandmarks.length == framesCount ) {
+                const shoulderHistory = this.prevBodyLandmarks.map(frame => frame[11]); // Hombro izquierdo
+                const smoothedright = this.applyHandSmoothingWithAnchor(
+                    this.prevRightHandLandmarks,
+                    shoulderHistory,
+                    this.smoothMediapipeLandmarks.bind(this)
+                );
+                land = smoothedright[smoothedright.length - 1];
+            }
+            detections.rightHand.w = land;
+        }
+        return detections;
+    }
+
+    /**
+     * history: [THREE.Quaternion, THREE.Quaternion, ...]  // for frame
+     * lambda: smoother Whittaker
+     * p: asymmetric factor
+     *
+     */
+    smoothQuaternionsByJointLocal(history, lambda = 50, p = 0.25) {
+        if (!history || Object.keys(history).length === 0) return {};
+   
+        const series = history;
+
+        const smoothedSeries = whittakerQuaternionSeries(series, lambda, p, false);
+
+        // // Slpit components
+        // const components = ['x', 'y', 'z', 'w'];
+        // const compSeries = components.map(c => series.map(q => q[c]));
+
+        // // Asymmetric filter for each component
+        // const filteredComp = compSeries.map(s => whittakerAsymmetricSmoothing(s, lambda, p, false));
+
+        // // Recompute quaternion for last frame
+        // const lastIdx = series.length - 1;
+        // const q = new THREE.Quaternion(
+        //     filteredComp[0][lastIdx],
+        //     filteredComp[1][lastIdx],
+        //     filteredComp[2][lastIdx],
+        //     filteredComp[3][lastIdx]
+        // ).normalize();
+    
+        return smoothedSeries[smoothedSeries.length - 1].normalize();
+    }
+
+    /**
+     * Filter the rotation of a bone using a buffer of previous frames
+     * @param {THREE.Quaternion[]} rotationsBuffer - array of previous quaternions quaternions
+     * @param {Object} prevState - previous state of the filter {q: THREE.Quaternion, P: math.matrix}
+     * @returns {THREE.Quaternion} - filtered rotation
+     */
+    filterBoneRotation(rotationsBuffer, prevState) {
+        if (rotationsBuffer.length === 0) return prevState.q.clone();
+
+        const buffer = rotationsBuffer.slice(-5); // use 5 last frames (for exemple)
+        const dt = 1 / 60; // asumes 60 FPS
+        const half_dt = 0.5 * dt;
+
+        // Estimate angular velocity
+        let omega = new THREE.Vector3(0,0,0);
+        if (buffer.length >= 2) {
+            const qPrev = buffer[buffer.length - 2];
+            const qLast = buffer[buffer.length - 1];
+            const dq = qPrev.clone().invert().multiply(qLast).normalize();
+
+            // convert to axis-angle
+            let angle = 2 * Math.acos(dq.w);
+            if (angle > Math.PI) angle -= 2*Math.PI;
+            const s = Math.sqrt(1 - dq.w*dq.w) || 1;
+            const axis = new THREE.Vector3(dq.x/s, dq.y/s, dq.z/s);
+            omega = axis.multiplyScalar(angle);
+        }
+
+        // Prediction: apply angular velocity to the previous state
+        const dqPred = new THREE.Quaternion(omega.x*half_dt, omega.y*half_dt, omega.z*half_dt, 1).normalize();
+        let qPred = prevState.q.clone().multiply(dqPred).normalize();
+
+        // Measurement: last quaternion of the buffer
+        const qMeas = buffer[buffer.length - 1];
+        const xArr = [qPred.w, qPred.x, qPred.y, qPred.z];
+        const zArr = [qMeas.w, qMeas.x, qMeas.y, qMeas.z];
+        const y = math.subtract(zArr, xArr);
+
+        // Kalman Gain
+        const P = prevState.P;
+        const Q = math.multiply(math.identity(4), 1e-5); // noise process
+        const R = math.multiply(math.identity(4), 1e-2); // noise measurement
+        const S = math.add(P, R);
+        const K = math.multiply(P, math.inv(S));
+
+        // Update
+        let xNew = math.add(xArr, math.multiply(K, y));
+        // Normalize quaternion
+        const norm = Math.sqrt(xNew[0]**2 + xNew[1]**2 + xNew[2]**2 + xNew[3]**2);
+        xNew = xNew.map(c => c / norm);
+
+        const qNew = new THREE.Quaternion(xNew[1], xNew[2], xNew[3], xNew[0]);
+
+        // Update covariance
+        const I4 = math.identity(4);
+        const Pnew = math.multiply(math.subtract(I4, K), P);
+
+        // Return new state
+        prevState.q.copy(qNew);
+        prevState.P = Pnew;
+
+        return qNew.clone();
+    }
 }
 
 export {Visualizer}
+
+
+
+/**
+ * Asymmetric Whittaker Smoothing
+ * @param {Array<number>} y - Original data series
+ * @param {number} lambda - Smoothness (100 - 1e7 usual range)
+ * @param {number} p - Asymmetry parameter (0-1), typical 0.001 - 0.1
+ * @returns {Array<number>} Smoothed data
+ */
+function whittakerAsymmetricSmoothing(data, lambda = 1000, p = 0.001, isVector = true) {
+        // const m = values.length;
+        // const w = new Array(m).fill(1);
+        // const z = [...values];
+
+        // for (let iter = 0; iter < 6; iter++) { // less iterations for real-time
+        //     const W = z.map((_, i) => w[i] * values[i]);
+        //     const A = Array.from({ length: m }, () => new Array(m).fill(0));
+
+        //     // diagonales
+        //     for (let i = 0; i < m; i++) A[i][i] = w[i] + lambda * 6;
+
+        //     // second-derivative penalization
+        //     for (let i = 0; i < m - 1; i++) {
+        //         A[i][i + 1] -= lambda * 4;
+        //         A[i + 1][i] -= lambda * 4;
+        //     }
+        //     for (let i = 0; i < m - 2; i++) {
+        //         A[i][i + 2] += lambda;
+        //         A[i + 2][i] += lambda;
+        //     }
+
+        //     // resolve Ax = W (remove fast gaussian)
+        //     for (let i = 0; i < m; i++) {
+        //         for (let j = i + 1; j < m; j++) {
+        //             const factor = A[j][i] / A[i][i];
+        //             for (let k = i; k < m; k++) {
+        //                 A[j][k] -= factor * A[i][k];
+        //             }
+        //             W[j] -= factor * W[i];
+        //         }
+        //     }
+        //     for (let i = m - 1; i >= 0; i--) {
+        //         for (let j = i + 1; j < m; j++) {
+        //             W[i] -= A[i][j] * z[j];
+        //         }
+        //         z[i] = W[i] / A[i][i];
+        //     }
+
+        //     // asymmetry
+        //     for (let i = 0; i < m; i++) {
+        //         w[i] = (values[i] > z[i]) ? p : (1 - p);
+        //     }
+        // }
+
+        // return z;
+        const smoothAxis = (values) => {
+            const m = values.length;
+            const w = new Array(m).fill(1);
+            const z = [...values];
+
+            for (let iter = 0; iter < 10; iter++) {
+                const W = z.map((_, i) => w[i] * values[i]);
+
+                // Solve (W + lambda * D'D) z = W * y
+                const A = Array.from({ length: m }, () => new Array(m).fill(0));
+
+                // Diagonal weights
+                for (let i = 0; i < m; i++) A[i][i] = w[i] + lambda * 6;
+
+                // Second derivative penalty matrix
+                for (let i = 0; i < m - 1; i++) {
+                    A[i][i + 1] -= lambda * 4;
+                    A[i + 1][i] -= lambda * 4;
+                }
+                for (let i = 0; i < m - 2; i++) {
+                    A[i][i + 2] += lambda;
+                    A[i + 2][i] += lambda;
+                }
+
+                // Gaussian elimination
+                for (let i = 0; i < m; i++) {
+                    for (let j = i + 1; j < m; j++) {
+                        const factor = A[j][i] / A[i][i];
+                        for (let k = i; k < m; k++) {
+                            A[j][k] -= factor * A[i][k];
+                        }
+                        W[j] -= factor * W[i];
+                    }
+                }
+
+                for (let i = m - 1; i >= 0; i--) {
+                    for (let j = i + 1; j < m; j++) {
+                        W[i] -= A[i][j] * z[j];
+                    }
+                    z[i] = W[i] / A[i][i];
+                }
+
+                for (let i = 0; i < m; i++) {
+                    w[i] = (values[i] > z[i]) ? p : (1 - p);
+                }
+            }
+
+            return z;
+        };
+
+        if( isVector ) {
+            const xs = data.map(v => v.x);
+            const ys = data.map(v => v.y);
+            const zs = data.map(v => v.z);
+    
+            const sx = smoothAxis(xs);
+            const sy = smoothAxis(ys);
+            const sz = smoothAxis(zs);
+            return data.map((_, i) => new THREE.Vector3(sx[i], sy[i], sz[i]));
+        }
+        else {
+            return smoothAxis(data);
+        }
+    
+}
+
+// qSeries: array dof quaternions (THREE.Quaternion)
+function whittakerQuaternionSeries(qSeries, lambda, p) {
+    if (!qSeries.length) return [];
+
+    const smoothed = [];
+    smoothed[0] = qSeries[0].clone();
+
+    for (let i = 1; i < qSeries.length; i++) {
+        // computes dynamic weight using Whittaker over angular change magnitud
+        const angleDelta = smoothed[i-1].angleTo(qSeries[i]);
+        const alpha = 1 / (1 + lambda * Math.pow(angleDelta, p));
+
+        const qNew = smoothed[i-1].clone().slerp(qSeries[i], alpha);
+        smoothed.push(qNew.normalize());
+    }
+
+    return smoothed;
+}

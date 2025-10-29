@@ -91,10 +91,41 @@ class App {
 
         this.camera = this.performs.cameras[this.performs.camera].clone();
 
-        this.prevBodyLandmarks = [];
-        this.prevHandsLandmarks = [];
-        this.visualizer = new Visualizer();
+        this.smoothLandmarks = false;
+        this.smoothFrameCount = 10;
+        this.visualizer = new Visualizer( this.smoothFrameCount );
         window.addEventListener( 'resize', this.onWindowResize.bind(this) );
+        window.addEventListener( 'keyup', (e) => { 
+            if(e.key == 's') {
+                this.smoothLandmarks = !this.smoothLandmarks
+            }
+            else if( e.key == "+") {
+                this.smoothFrameCount++;
+                this.visualizer.smoothFrameCount = this.smoothFrameCount;
+            }
+            else if( e.key == "-") {
+                this.smoothFrameCount--;
+                this.visualizer.smoothFrameCount = this.smoothFrameCount;
+            }
+            else if( e.key == "p" ) {
+                if( e.ctrlKey ) {
+                    this.visualizer.p-= 0.1;
+                }
+                else {
+                    this.visualizer.p+= 0.1;
+                }
+                console.log(this.visualizer.p);
+            }
+            else if( e.key == "l" ) {
+                if( e.ctrlKey ) {
+                    this.visualizer.lambda-=100;
+                }
+                else {
+                    this.visualizer.lambda+=100;
+                }
+                console.log(this.visualizer.lambda);
+            }
+        })
     }
 
     onWindowResize() {
@@ -797,23 +828,7 @@ class App {
         });
     }
 
-    //   onBeginCapture() {
-    //     const on_error = (err) => {
-    //         console.log("capture error")
-    //     }
-
-    //     MediaPipe.start(true, (landmarks) => {
-    //         // on results
-    //         this.visualizer.buildPose(landmarks);
-    //     },
-    //     (detections) => {
-    //         // on results
-    //         this.visualizer.processDetections(detections);
-    //     }
-    //     );
-    // }
-
-        /**
+    /**
      * @description Set the webcam stream to the video element and create the mediarecorder, enables mediapipe. Called from processWebcam() and on redo the capture.
     */
     async prepareWebcamRecording() {
@@ -865,66 +880,6 @@ class App {
 
         } );
             
-    }
-
-    /**
-     * 
-     * @param {array of Mediapipe landmarks} inLandmarks each entry of the array is a frame containing an object with information about the mediapipe output { FLM, PLM, LLM, RLM, PWLM, LWLM, RWLM }
-     * @returns {array of Mediapipe landmarks} same heriarchy as inLandmarks but smoothed
-     */
-    smoothMediapipeLandmarks( inLandmarks, lambda, p  ){
-        let outLandmarks = JSON.parse(JSON.stringify(inLandmarks));
-
-        let arrayToSmoothX = new Array( inLandmarks.length );
-        let arrayToSmoothY = new Array( inLandmarks.length );
-        let arrayToSmoothZ = new Array( inLandmarks.length );
- 
-        const initialValues = inLandmarks[0];
-       
-        for(let l = 0; l < initialValues.length; ++l ){
-            
-            //for each frame get the value to smooth (or a default one)
-            let values = initialValues[l]; // default values in case there is no landmark estimation for a frame
-            for( let f = 0; f < inLandmarks.length; ++f ){
-
-                if (outLandmarks[f] ){
-                    values = outLandmarks[f][l];  // found a valid landmark, set it as default
-                }
-                arrayToSmoothX[f] = values.x;
-                arrayToSmoothY[f] = values.y;
-                arrayToSmoothZ[f] = values.z;
-            }
-
-            const smoothX = whittakerAsymmetricSmoothing(arrayToSmoothX, lambda, p);
-            const smoothY = whittakerAsymmetricSmoothing(arrayToSmoothY, lambda, p);
-            const smoothZ = whittakerAsymmetricSmoothing(arrayToSmoothZ, lambda, p);
-
-            //for each frame, set smoothed values
-            for( let f = 0; f < inLandmarks.length; ++f ){
-                if (outLandmarks[f]){
-                    outLandmarks[f][l].x = smoothX[f];
-                    outLandmarks[f][l].y = smoothY[f];
-                    outLandmarks[f][l].z = smoothZ[f];
-
-                    // if(f == inLandmarks.length-1) {
-                    //     // light prediction (avoids delay)
-                    //     const smooth = new THREE.Vector3(smoothX[f], smoothY[f], smoothZ[f]);
-                    //     const last = new THREE.Vector3(inLandmarks[inLandmarks.length - 1][l].x, inLandmarks[inLandmarks.length - 1][l].y, inLandmarks[inLandmarks.length - 1][l].z);
-                    //     const prev = new THREE.Vector3(inLandmarks[inLandmarks.length - 2][l].x, inLandmarks[inLandmarks.length - 2][l].y, inLandmarks[inLandmarks.length - 2][l].z);
-                       
-                    //     const velocity = last.clone().sub(prev);
-                    //     const predicted = smooth.clone().add(velocity.multiplyScalar(0.5));
-                    //     outLandmarks[f][l].x = predicted.x;
-                    //     outLandmarks[f][l].y = predicted.y;
-                    //     outLandmarks[f][l].z = predicted.z;
-                    // }
-                }
-
-            } 
-        } // end of landmark
-
-
-        return outLandmarks;
     }
 
     draw2DLandmarksVideo() {
@@ -1071,57 +1026,39 @@ class App {
             const detectionsHands = this.handLandmarker.detect(bitmap);
             const detectionsPose = this.poseLandmarker.detect(bitmap);
             bitmap.close();
-            const detections = {
+            let detections = {
                 body:{l:[], w:[]},
                 leftHand:{l:[], w:[]},
                 rightHand:{l:[], w:[]},
                 retargetLandmarks: false,
             }
+            
             if( detectionsPose.worldLandmarks.length && detectionsPose.worldLandmarks[0]) {
-                let land = detectionsPose.worldLandmarks[0];
-                if(this.prevBodyLandmarks.length == 15) {
-                    this.prevBodyLandmarks = this.prevBodyLandmarks.slice(1);
-                }
-                this.prevBodyLandmarks.push(detectionsPose.worldLandmarks[0]);
-                if(this.prevBodyLandmarks.length ==15) {
-                    land = this.smoothMediapipeLandmarks(this.prevBodyLandmarks, 2000, 0.5);
-                    land = land[this.prevBodyLandmarks.length-1];
-                }
+                
                 detections.body.l = detectionsPose.landmarks[0];
-                detections.body.w = land//detectionsPose.worldLandmarks[0];
+                detections.body.w =detectionsPose.worldLandmarks[0];
             }
-
+            
             if( detectionsHands.worldLandmarks.length ) {
-                let done = 0x03; // bit0 left, bit1 right
-                for ( let i = 0; i < detectionsHands.handednesses.length; ++i ){
-                    let h = detectionsHands.handednesses[i][0];
-                    let dst = detections.rightHand;
-                    if ( h.categoryName == 'Left' ){
-                        dst = detections.leftHand
-                        done &= 0xfe;
-                    }else{
-                        done &= 0xfd;
+                for( let i = 0; i < detectionsHands.handednesses.length; ++i ){
+                    let h = detectionsHands.handednesses[i][0];                    
+                    if( h.categoryName == 'Left' ){                        
+                        detections.leftHand.l = detectionsHands.landmarks[i];
+                        detections.leftHand.w = detectionsHands.worldLandmarks[i];
                     }
-                    let land = detectionsHands.worldLandmarks[0];
-                    if(this.prevHandsLandmarks.length == 15) {
-                        this.prevHandsLandmarks = this.prevHandsLandmarks.slice(1);
+                    else{
+                        detections.rightHand.l = detectionsHands.landmarks[i];
+                        detections.rightHand.w = detectionsHands.worldLandmarks[i];
                     }
-                    this.prevHandsLandmarks.push(detectionsHands.worldLandmarks[0]);
-                    if(this.prevHandsLandmarks.length ==15) {
-                        land = this.smoothMediapipeLandmarks(this.prevHandsLandmarks, 4000, 0.05);
-                        land = land[this.prevHandsLandmarks.length-1];
-                    }
-                    dst.l = detectionsHands.landmarks[ i ]
-                    dst.w = detectionsHands.worldLandmarks[ i ]
                 }
+            }
+            if( this.smoothLandmarks ) {
+                detections = this.visualizer.smoothDetections(detections, this.smoothFrameCount);
             }
             this.visualizer.processDetections(detections, PoseLandmarker.POSE_CONNECTIONS, HandLandmarker.HAND_CONNECTIONS);
             this.visualizer.animate();
         }
-        else {
-        }
-        
-
+       
         stats.update()
 
         requestAnimationFrame(this.animate.bind(this));
@@ -1291,59 +1228,3 @@ class Window {
 
 }
 window.global = {app};
-
-
-/**
- * Asymmetric Whittaker Smoothing
- * @param {Array<number>} y - Original data series
- * @param {number} lambda - Smoothness (100 - 1e7 usual range)
- * @param {number} p - Asymmetry parameter (0-1), typical 0.001 - 0.1
- * @returns {Array<number>} Smoothed data
- */
-function whittakerAsymmetricSmoothing(values, lambda = 1000, p = 0.001) {
-        const m = values.length;
-        const w = new Array(m).fill(1);
-        const z = [...values];
-
-        for (let iter = 0; iter < 6; iter++) { // less iterations for real-time
-            const W = z.map((_, i) => w[i] * values[i]);
-            const A = Array.from({ length: m }, () => new Array(m).fill(0));
-
-            // diagonales
-            for (let i = 0; i < m; i++) A[i][i] = w[i] + lambda * 6;
-
-            // second-derivative penalization
-            for (let i = 0; i < m - 1; i++) {
-                A[i][i + 1] -= lambda * 4;
-                A[i + 1][i] -= lambda * 4;
-            }
-            for (let i = 0; i < m - 2; i++) {
-                A[i][i + 2] += lambda;
-                A[i + 2][i] += lambda;
-            }
-
-            // resolve Ax = W (remove fast gaussian)
-            for (let i = 0; i < m; i++) {
-                for (let j = i + 1; j < m; j++) {
-                    const factor = A[j][i] / A[i][i];
-                    for (let k = i; k < m; k++) {
-                        A[j][k] -= factor * A[i][k];
-                    }
-                    W[j] -= factor * W[i];
-                }
-            }
-            for (let i = m - 1; i >= 0; i--) {
-                for (let j = i + 1; j < m; j++) {
-                    W[i] -= A[i][j] * z[j];
-                }
-                z[i] = W[i] / A[i][i];
-            }
-
-            // asymmetry
-            for (let i = 0; i < m; i++) {
-                w[i] = (values[i] > z[i]) ? p : (1 - p);
-            }
-        }
-
-        return z;
-}
