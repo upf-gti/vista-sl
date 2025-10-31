@@ -92,23 +92,30 @@ class App {
         this.camera = this.performs.cameras[this.performs.camera].clone();
 
         this.smoothLandmarks = false;
-        this.smoothFrameCount = 10;
+        this.smoothFrameCount = 3;
         this.visualizer = new Visualizer( this.smoothFrameCount );
         window.addEventListener( 'resize', this.onWindowResize.bind(this) );
         window.addEventListener( 'keyup', (e) => { 
             if(e.key == 's') {
-                this.smoothLandmarks = !this.smoothLandmarks
+                this.smoothLandmarks = !this.smoothLandmarks;
+                console.log("Landmarks smoothed: ", this.smoothLandmarks);
+            }
+            if(e.key == 'r') {
+                this.visualizer.smoothRotations = !this.visualizer.smoothRotations;
+                console.log("Rotations smoothed: ", this.visualizer.smoothRotations);
             }
             else if( e.key == "+") {
                 this.smoothFrameCount++;
                 this.visualizer.smoothFrameCount = this.smoothFrameCount;
+                console.log("Frame count: ",  this.smoothFrameCount);
             }
             else if( e.key == "-") {
                 this.smoothFrameCount--;
                 this.visualizer.smoothFrameCount = this.smoothFrameCount;
+                console.log("Frame count: ",  this.smoothFrameCount);
             }
             else if( e.key == "p" ) {
-                if( e.ctrlKey ) {
+                if( e.shiftKey ) {
                     this.visualizer.p-= 0.1;
                 }
                 else {
@@ -117,13 +124,17 @@ class App {
                 console.log(this.visualizer.p);
             }
             else if( e.key == "l" ) {
-                if( e.ctrlKey ) {
+                if( e.shiftKey ) {
                     this.visualizer.lambda-=100;
                 }
                 else {
                     this.visualizer.lambda+=100;
                 }
                 console.log(this.visualizer.lambda);
+            }
+            else if( e.key == "v" ) {
+                this.visualizer.showSkeletons = !this.visualizer.showSkeletons; 
+                this.visualizer.changeVisibility();
             }
         })
     }

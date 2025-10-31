@@ -3,7 +3,7 @@ import { BVHLoader } from 'three/addons/loaders/BVHLoader.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { AnimationRetargeting } from './retargeting.js'
 
-import * as math from 'mathjs';
+import { BoneKalmanFilter, estimateOmegaFromBuffer, QuaternionOneEuroFilter } from './filter.js';
 
 function getTwistQuaternion( q, normAxis, outTwist ){
     let dot =  q.x * normAxis.x + q.y * normAxis.y + q.z * normAxis.z;
@@ -78,6 +78,10 @@ class Visualizer {
         this.smoothFrameCount = frameCount || 10;
         this.lambda = 100;
         this.p = 0.5;
+
+        this.kf = {};
+        this.smoothRotations = true;
+        this.showSkeletons = false;
     }
 
     async init( scene, character, POSE_CONNECTIONS, HAND_CONNECTIONS ) {
@@ -180,23 +184,27 @@ class Visualizer {
         forceBindPoseQuats( this.skeleton, false );
 
         if( this.bodyPoints.length ){
-            this.computeSpine( this.skeleton, this.bodyPoints );
-            this.computeQuatHead( this.skeleton, this.bodyPoints )
+            this.computeSpine( this.skeleton, this.bodyPoints, delta);
+            this.computeQuatHead( this.skeleton, this.bodyPoints, delta )
         }
         if ( this.rightHandPoints.length ){ 
-            this.computeQuatArm( this.skeleton, this.bodyPoints, false );
-            this.computeQuatHand( this.skeleton, this.rightHandPoints, false); 
-            this.computeQuatPhalange( this.skeleton, this.rightHandPoints, false );
+            this.computeQuatArm( this.skeleton, this.bodyPoints, false, delta );
+            this.computeQuatHand( this.skeleton, this.rightHandPoints, false, delta); 
+            this.computeQuatPhalange( this.skeleton, this.rightHandPoints, false, delta );
         }
         if ( this.leftHandPoints.length ){
-            this.computeQuatArm( this.skeleton, this.bodyPoints, true );
-            this.computeQuatHand( this.skeleton, this.leftHandPoints, true); 
-            this.computeQuatPhalange( this.skeleton, this.leftHandPoints, true );
+            this.computeQuatArm( this.skeleton, this.bodyPoints, true, delta );
+            this.computeQuatHand( this.skeleton, this.leftHandPoints, true, delta); 
+            this.computeQuatPhalange( this.skeleton, this.leftHandPoints, true, delta );
         }
 
     }
 
-    computeSpine( skeleton, bodyLandmarks ){
+    changeVisibility() {
+        this.pointCloudGroup.visible = !this.pointCloudGroup.visible;
+    }
+
+    computeSpine( skeleton, bodyLandmarks, dt ){
         if ( !bodyLandmarks ){ return; }
         //bodyLandmarks is an array of {x,y,z,visiblity} (mediapipe)
 
@@ -256,48 +264,92 @@ class Visualizer {
         boneHips.quaternion.multiply(qq);
 
         if (!this.rotationHistory["hips"]) this.rotationHistory["hips"] = [];
-        this.rotationHistory["hips"].push(boneHips.quaternion); // localRotations["hips"] = THREE.Quaternion
+        //this.rotationHistory["hips"].push(boneHips.quaternion); // localRotations["hips"] = THREE.Quaternion
         while (this.rotationHistory["hips"].length >= this.smoothFrameCount) this.rotationHistory["hips"].shift();
 
-        let smoothedLocalRotation = this.smoothQuaternionsByJointLocal(this.rotationHistory["hips"], this.lambda, this.p);
-        boneHips.quaternion.copy(smoothedLocalRotation);
+        // let smoothedLocalRotation = this.smoothQuaternionsByJointLocal(this.rotationHistory["hips"], this.lambda, this.p);
+        // boneHips.quaternion.copy(smoothedLocalRotation);
 
+        let qTarget = null;
+        let qFiltered = null;
+
+        if( this.smoothRotations ) {
+            if(!this.kf["hips"]) {
+                this.kf["hips"] = new QuaternionOneEuroFilter(60, 1.0, 0.001, 1.0);
+            }
+
+            qTarget =  boneHips.quaternion; // quaternion object THREE.Quaternion
+            qFiltered = this.kf["hips"].filter(qTarget, dt);
+            boneHips.quaternion.copy(qFiltered);
+        }
         // move qq from left_spine0_Quat to right_spine_Quat.  
         // Q = (hips * qq) * spine0Quat = hips * (qq * spine0Quat) = hips * spine0Quat * qq'
         qq.multiply( boneSpine0.quaternion ).premultiply( tempQuat.copy( boneSpine0.quaternion ).invert() );
         boneSpine0.quaternion.multiply( qq );
 
         if (!this.rotationHistory["spine0"]) this.rotationHistory["spine0"] = [];
-        this.rotationHistory["spine0"].push(boneSpine0.quaternion); // localRotations["spine0"] = THREE.Quaternion
+        // this.rotationHistory["spine0"].push(boneSpine0.quaternion); // localRotations["spine0"] = THREE.Quaternion
         while (this.rotationHistory["spine0"].length >= this.smoothFrameCount) this.rotationHistory["spine0"].shift();
 
-        smoothedLocalRotation = this.smoothQuaternionsByJointLocal(this.rotationHistory["spine0"], this.lambda, this.p);
-        boneSpine0.quaternion.copy(smoothedLocalRotation);
+        // smoothedLocalRotation = this.smoothQuaternionsByJointLocal(this.rotationHistory["spine0"], this.lambda, this.p);
+        // boneSpine0.quaternion.copy(smoothedLocalRotation);
 
+        if( this.smoothRotations ) {
+            if(!this.kf["spine0"]) {
+                this.kf["spine0"] = new QuaternionOneEuroFilter(60, 1.0, 0.001, 1.0);
+            }
+
+            qTarget =  boneSpine0.quaternion; // quaternion object THREE.Quaternion
+            qFiltered = this.kf["spine0"].filter(qTarget, dt);
+            boneSpine0.quaternion.copy(qFiltered);
+            this.rotationHistory["spine0"].push(boneSpine0.quaternion); // localRotations["spine0"] = THREE.Quaternion
+        }
         // Q = (spine0Quat * qq') * spine1Quat = spine0Quat * (qq' * spine1Quat) = spine0Quat * spine1Quat * qq''
         qq.multiply( boneSpine1.quaternion ).premultiply( tempQuat.copy( boneSpine1.quaternion ).invert() );
         boneSpine1.quaternion.multiply( qq );
 
         if (!this.rotationHistory["spine1"]) this.rotationHistory["spine1"] = [];
-        this.rotationHistory["spine1"].push(boneSpine1.quaternion); // localRotations["spine1"] = THREE.Quaternion
+        //this.rotationHistory["spine1"].push(boneSpine1.quaternion); // localRotations["spine1"] = THREE.Quaternion
         while (this.rotationHistory["spine1"].length >= this.smoothFrameCount) this.rotationHistory["spine1"].shift();
 
-        smoothedLocalRotation = this.smoothQuaternionsByJointLocal(this.rotationHistory["spine1"], this.lambda, this.p);
-        boneSpine1.quaternion.copy(smoothedLocalRotation);
-        
+        // smoothedLocalRotation = this.smoothQuaternionsByJointLocal(this.rotationHistory["spine1"], this.lambda, this.p);
+        // boneSpine1.quaternion.copy(smoothedLocalRotation);
+
+        if( this.smoothRotations ) {
+            if(!this.kf["spine1"]) {
+                this.kf["spine1"] = new QuaternionOneEuroFilter(60, 1.0, 0.001, 1.0);
+            }
+
+            qTarget =  boneSpine1.quaternion; // quaternion object THREE.Quaternion
+            qFiltered = this.kf["spine1"].filter(qTarget, dt);
+            boneSpine1.quaternion.copy(qFiltered);
+            this.rotationHistory["spine1"].push(boneSpine1.quaternion); // localRotations["spine1"] = THREE.Quaternion
+        }
+
         // // Q = (spine1Quat * qq'') * spine2Quat = spine1Quat * (qq'' * spine2Quat) = spine1Quat * spine2Quat * qq'''
         // qq.multiply( boneSpine2.quaternion ).premultiply( tempQuat.copy( boneSpine2.quaternion ).invert() );
         // boneSpine2.quaternion.multiply( qq );
         boneSpine2.quaternion.premultiply( qq );
         
         if (!this.rotationHistory["spine2"]) this.rotationHistory["spine2"] = [];
-        this.rotationHistory["spine2"].push(boneSpine2.quaternion); // localRotations["spine2"] = THREE.Quaternion
+        // this.rotationHistory["spine2"].push(boneSpine2.quaternion); // localRotations["spine2"] = THREE.Quaternion
         while (this.rotationHistory["spine2"].length >= this.smoothFrameCount) this.rotationHistory["spine2"].shift();
-        smoothedLocalRotation = this.smoothQuaternionsByJointLocal(this.rotationHistory["spine2"], this.lambda, this.p);
-        boneSpine2.quaternion.copy(smoothedLocalRotation);
+        // smoothedLocalRotation = this.smoothQuaternionsByJointLocal(this.rotationHistory["spine2"], this.lambda, this.p);
+        // boneSpine2.quaternion.copy(smoothedLocalRotation);
+
+        if( this.smoothRotations ) {
+            if(!this.kf["spine2"]) {
+                this.kf["spine2"] = new QuaternionOneEuroFilter(60, 1.0, 0.001, 1.0);
+            }
+
+            qTarget =  boneSpine2.quaternion; // quaternion object THREE.Quaternion
+            qFiltered = this.kf["spine2"].filter(qTarget, dt);
+            boneSpine2.quaternion.copy(qFiltered);
+            this.rotationHistory["spine2"].push(boneSpine2.quaternion); // localRotations["spine2"] = THREE.Quaternion
+        }
     }
 
-    computeQuatHead( skeleton, bodyLandmarks ){
+    computeQuatHead( skeleton, bodyLandmarks, dt ){
         if ( !bodyLandmarks ){ return; }
         //bodyLandmarks is an array of {x,y,z,visiblity} (mediapipe)
 
@@ -341,14 +393,26 @@ class Visualizer {
         boneHead.quaternion.multiply( qq ).normalize();
 
         if (!this.rotationHistory["head"]) this.rotationHistory["head"] = [];
-        this.rotationHistory["head"].push(boneHead.quaternion); // localRotations["head"] = THREE.Quaternion
+        // this.rotationHistory["head"].push(boneHead.quaternion); // localRotations["head"] = THREE.Quaternion
         while (this.rotationHistory["head"].length >= this.smoothFrameCount) this.rotationHistory["head"].shift();
 
-        let smoothedLocalRotation = this.smoothQuaternionsByJointLocal(this.rotationHistory["head"], this.lambda, this.p);
-        boneHead.quaternion.copy(smoothedLocalRotation);
+        // let smoothedLocalRotation = this.smoothQuaternionsByJointLocal(this.rotationHistory["head"], this.lambda, this.p);
+        // boneHead.quaternion.copy(smoothedLocalRotation);
+
+        if( this.smoothRotations ) {
+            if(!this.kf["head"]) {
+                this.kf["head"] = new QuaternionOneEuroFilter(60, 1.0, 0.001, 1.0);
+            }
+
+            let qTarget =  boneHead.quaternion; // quaternion object THREE.Quaternion
+            let qFiltered = this.kf["head"].filter(qTarget, dt);
+            boneHead.quaternion.copy(qFiltered);
+            this.rotationHistory["head"].push(boneHead.quaternion); // localRotations["head"] = THREE.Quaternion
+        }
+
     }
 
-    computeQuatArm( skeleton, bodyLandmarks, isLeft = false ){
+    computeQuatArm( skeleton, bodyLandmarks, isLeft = false, dt ){
         if ( !bodyLandmarks ){ return; }
         //bodyLandmarks is an array of {x,y,z,visiblity} (mediapipe)
 
@@ -387,15 +451,25 @@ class Visualizer {
 
             const boneName = `arm${isLeft? "Left" : "Right"}${i}`;
             if (!this.rotationHistory[boneName]) this.rotationHistory[boneName] = [];
-            this.rotationHistory[boneName].push(boneSrc.quaternion); // localRotations[boneName] = THREE.Quaternion
+            // this.rotationHistory[boneName].push(boneSrc.quaternion); // localRotations[boneName] = THREE.Quaternion
             while (this.rotationHistory[boneName].length >= this.smoothFrameCount) this.rotationHistory[boneName].shift();
 
-            let smoothedLocalRotation = this.smoothQuaternionsByJointLocal(this.rotationHistory[boneName], this.lambda, this.p);
-            boneSrc.quaternion.copy(smoothedLocalRotation);
+            // let smoothedLocalRotation = this.smoothQuaternionsByJointLocal(this.rotationHistory[boneName], this.lambda, this.p);
+            // boneSrc.quaternion.copy(smoothedLocalRotation);
+
+            if( this.smoothRotations ) {
+                if(!this.kf[boneName]) {
+                    this.kf[boneName] = new QuaternionOneEuroFilter(60, 1.0, 0.001, 1.0);
+                }
+                let qTarget =  boneSrc.quaternion; // quaternion object THREE.Quaternion
+                let qFiltered = this.kf[boneName].filter(qTarget, dt);
+                boneSrc.quaternion.copy(qFiltered);
+                this.rotationHistory[boneName].push(boneSrc.quaternion); // localRotations[boneName] = THREE.Quaternion
+            }
         }
     }
 
-    computeQuatHand( skeleton, handLandmarks, isLeft = false ){
+    computeQuatHand( skeleton, handLandmarks, isLeft = false, dt ){
         if ( !handLandmarks ){ return; }
         //handlandmarks is an array of {x,y,z,visiblity} (mediapipe)
 
@@ -436,14 +510,24 @@ class Visualizer {
         
         const boneName = `hand${isLeft? "Left" : "Right"}`;
         if (!this.rotationHistory[boneName]) this.rotationHistory[boneName] = [];
-        this.rotationHistory[boneName].push(boneHand.quaternion); // localRotations[boneName] = THREE.Quaternion
+        // this.rotationHistory[boneName].push(boneHand.quaternion); // localRotations[boneName] = THREE.Quaternion
         while (this.rotationHistory[boneName].length >= this.smoothFrameCount) this.rotationHistory[boneName].shift();
 
-        let smoothedLocalRotation = this.smoothQuaternionsByJointLocal(this.rotationHistory[boneName], this.lambda, this.p);
-        boneHand.quaternion.copy(smoothedLocalRotation);
+        // let smoothedLocalRotation = this.smoothQuaternionsByJointLocal(this.rotationHistory[boneName], this.lambda, this.p);
+        // boneHand.quaternion.copy(smoothedLocalRotation);
+
+        if( this.smoothRotations ) {
+            if(!this.kf[boneName]) {
+                this.kf[boneName] = new QuaternionOneEuroFilter(60, 1.0, 0.001, 1.0);
+            }
+            let qTarget =  boneHand.quaternion; // quaternion object THREE.Quaternion
+            let qFiltered = this.kf[boneName].filter(qTarget, dt);
+            boneHand.quaternion.copy(qFiltered);
+            this.rotationHistory[boneName].push(boneHand.quaternion); // localRotations[boneName] = THREE.Quaternion
+        }
     }
 
-    computeQuatPhalange( skeleton, handLandmarks, isLeft = false ){
+    computeQuatPhalange( skeleton, handLandmarks, isLeft = false, dt ){
         if ( !handLandmarks ){ return; }
         //handlandmarks is an array of {x,y,z,visiblity} (mediapipe)
 
@@ -612,13 +696,23 @@ class Visualizer {
                 getTwistQuaternion( rot, phalange_p, twist ); // remove undesired twist from phalanges
                 boneSrc.quaternion.multiply( rot ).multiply( twist.invert() ).normalize();
 
-                const boneName = `phalange${isLeft? "Left" : "Right"}Finger${f}_${i}`;
-                if (!this.rotationHistory[boneName]) this.rotationHistory[boneName] = [];
-                this.rotationHistory[boneName].push(boneSrc.quaternion); // localRotations[boneName] = THREE.Quaternion
-                while (this.rotationHistory[boneName].length >= this.smoothFrameCount) this.rotationHistory[boneName].shift();
+                if( this.smoothRotations ) {
+                    const boneName = `phalange${isLeft? "Left" : "Right"}Finger${f}_${i}`;
+                    if (!this.rotationHistory[boneName]) this.rotationHistory[boneName] = [];
+                    // this.rotationHistory[boneName].push(boneSrc.quaternion); // localRotations[boneName] = THREE.Quaternion
+                    while (this.rotationHistory[boneName].length >= this.smoothFrameCount) this.rotationHistory[boneName].shift();
 
-                let smoothedLocalRotation = this.smoothQuaternionsByJointLocal(this.rotationHistory[boneName], this.lambda, this.p);
-                boneSrc.quaternion.copy(smoothedLocalRotation);
+                    // let smoothedLocalRotation = this.smoothQuaternionsByJointLocal(this.rotationHistory[boneName], this.lambda, this.p);
+                    // boneSrc.quaternion.copy(smoothedLocalRotation);
+            
+                    if(!this.kf[boneName]) {
+                        this.kf[boneName] = new QuaternionOneEuroFilter(60, 1.0, 0.001, 1.0);
+                    }
+                    let qTarget =  boneSrc.quaternion; // quaternion object THREE.Quaternion
+                    let qFiltered = this.kf[boneName].filter(qTarget, dt);
+                    boneSrc.quaternion.copy(qFiltered);
+                    this.rotationHistory[boneName].push(boneSrc.quaternion); // localRotations[boneName] = THREE.Quaternion
+                }
             }// end of phalange for
 
             // add lateral deviation for fingers, only on the base bone. Right now, fingers are all in the plane ( Normal x Forward )
@@ -728,7 +822,7 @@ class Visualizer {
         let smoothedWrist = smoothFn(fake, 100, 0.8, [0]);
         smoothedWrist = smoothedWrist.map( f => f[0]);
         
-        const smoothedRelative = smoothFn(relativeHistory,  100, 0.8, [0]);
+        const smoothedRelative = smoothFn(relativeHistory,  this.lambda || 100, this.p || 0.8, [0]);
 
         const finalFrames = [];
 
@@ -740,7 +834,7 @@ class Visualizer {
             };
 
             //  Smooth shoulder-wrist distance           
-            const filteredAnchor = smoothFn([[anchorVector]], 100, 0.8, [0])[0][0];
+            const filteredAnchor = smoothFn([[anchorVector]],this.lambda || 100, this.p || 0.8, [0])[0][0];
             // Recompute global wrist coords
             const correctedWrist = {
                 x: shoulderPos[i].x + filteredAnchor.x,
@@ -763,7 +857,7 @@ class Visualizer {
      * @param {array of Mediapipe landmarks} inLandmarks each entry of the array is a frame containing an object with information about the mediapipe output { FLM, PLM, LLM, RLM, PWLM, LWLM, RWLM }
      * @returns {array of Mediapipe landmarks} same heriarchy as inLandmarks but smoothed
      */
-    smoothMediapipeLandmarks(history, lambda = 2000, p = 0.5, rootIndices = [23, 24]) {
+    smoothMediapipeLandmarks(history, lambda = this.lambda, p = this.p, rootIndices = [23, 24]) {
         if (!history.length || !history[0].length) return history;
 
         // Convert history to THREE.Vector3 frames
@@ -860,7 +954,7 @@ class Visualizer {
             }
             this.prevLeftHandLandmarks.push(detections.leftHand.w);
             if( this.prevLeftHandLandmarks.length == framesCount ) {
-                const shoulderHistory = this.prevBodyLandmarks.map(frame => frame[11]); // Hombro izquierdo
+                const shoulderHistory = this.prevBodyLandmarks.map(frame => frame[11]); // Left Shoulder
                 const smoothedLeft = this.applyHandSmoothingWithAnchor(
                     this.prevLeftHandLandmarks,
                     shoulderHistory,
@@ -878,7 +972,7 @@ class Visualizer {
             }
             this.prevRightHandLandmarks.push(detections.rightHand.w);
             if( this.prevRightHandLandmarks.length == framesCount ) {
-                const shoulderHistory = this.prevBodyLandmarks.map(frame => frame[11]); // Hombro izquierdo
+                const shoulderHistory = this.prevBodyLandmarks.map(frame => frame[11]); // Right Shoulder
                 const smoothedright = this.applyHandSmoothingWithAnchor(
                     this.prevRightHandLandmarks,
                     shoulderHistory,
@@ -923,71 +1017,7 @@ class Visualizer {
         return smoothedSeries[smoothedSeries.length - 1].normalize();
     }
 
-    /**
-     * Filter the rotation of a bone using a buffer of previous frames
-     * @param {THREE.Quaternion[]} rotationsBuffer - array of previous quaternions quaternions
-     * @param {Object} prevState - previous state of the filter {q: THREE.Quaternion, P: math.matrix}
-     * @returns {THREE.Quaternion} - filtered rotation
-     */
-    filterBoneRotation(rotationsBuffer, prevState) {
-        if (rotationsBuffer.length === 0) return prevState.q.clone();
-
-        const buffer = rotationsBuffer.slice(-5); // use 5 last frames (for exemple)
-        const dt = 1 / 60; // asumes 60 FPS
-        const half_dt = 0.5 * dt;
-
-        // Estimate angular velocity
-        let omega = new THREE.Vector3(0,0,0);
-        if (buffer.length >= 2) {
-            const qPrev = buffer[buffer.length - 2];
-            const qLast = buffer[buffer.length - 1];
-            const dq = qPrev.clone().invert().multiply(qLast).normalize();
-
-            // convert to axis-angle
-            let angle = 2 * Math.acos(dq.w);
-            if (angle > Math.PI) angle -= 2*Math.PI;
-            const s = Math.sqrt(1 - dq.w*dq.w) || 1;
-            const axis = new THREE.Vector3(dq.x/s, dq.y/s, dq.z/s);
-            omega = axis.multiplyScalar(angle);
-        }
-
-        // Prediction: apply angular velocity to the previous state
-        const dqPred = new THREE.Quaternion(omega.x*half_dt, omega.y*half_dt, omega.z*half_dt, 1).normalize();
-        let qPred = prevState.q.clone().multiply(dqPred).normalize();
-
-        // Measurement: last quaternion of the buffer
-        const qMeas = buffer[buffer.length - 1];
-        const xArr = [qPred.w, qPred.x, qPred.y, qPred.z];
-        const zArr = [qMeas.w, qMeas.x, qMeas.y, qMeas.z];
-        const y = math.subtract(zArr, xArr);
-
-        // Kalman Gain
-        const P = prevState.P;
-        const Q = math.multiply(math.identity(4), 1e-5); // noise process
-        const R = math.multiply(math.identity(4), 1e-2); // noise measurement
-        const S = math.add(P, R);
-        const K = math.multiply(P, math.inv(S));
-
-        // Update
-        let xNew = math.add(xArr, math.multiply(K, y));
-        // Normalize quaternion
-        const norm = Math.sqrt(xNew[0]**2 + xNew[1]**2 + xNew[2]**2 + xNew[3]**2);
-        xNew = xNew.map(c => c / norm);
-
-        const qNew = new THREE.Quaternion(xNew[1], xNew[2], xNew[3], xNew[0]);
-
-        // Update covariance
-        const I4 = math.identity(4);
-        const Pnew = math.multiply(math.subtract(I4, K), P);
-
-        // Return new state
-        prevState.q.copy(qNew);
-        prevState.P = Pnew;
-
-        return qNew.clone();
-    }
 }
-
 export {Visualizer}
 
 
