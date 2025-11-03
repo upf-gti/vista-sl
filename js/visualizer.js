@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { BVHLoader } from 'three/addons/loaders/BVHLoader.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { AnimationRetargeting } from './retargeting.js'
+import { AnimationRetargeting, applyTPose } from './retargeting.js'
 
 import { BoneKalmanFilter, estimateOmegaFromBuffer, QuaternionOneEuroFilter } from './filter.js';
 
@@ -171,6 +171,7 @@ class Visualizer {
             this.retargeting = new AnimationRetargeting( this.bvh.skeleton, this.skeleton, { trgUseCurrentPose: true, srcEmbedWorldTransforms: true } );
             // guizmo stuff
           
+            this.scene.remove(this.scene.getObjectByName("SkeletonHelper"));
             this.scene.add( this.skeletonHelper );
             this.animation = null;
       
@@ -940,8 +941,15 @@ class Visualizer {
             this.prevBodyLandmarks.push(detections.body.w);
             if(this.prevBodyLandmarks.length == framesCount) {
                 
-                land = this.smoothMediapipeLandmarks(this.prevBodyLandmarks, 100, 0.5, [23, 24]);
+                land = this.smoothMediapipeLandmarks(this.prevBodyLandmarks, this.lambda || 100, this.p || 0.5, [23, 24]);
                 land = land[this.prevBodyLandmarks.length-1];
+                land = land.map(v => { 
+                    v.x *= this.lambda;
+                    v.y *= this.lambda;
+                    v.z *= this.lambda;
+                    return v
+                })
+                
             }
 
             detections.body.w = land//detectionsPose.worldLandmarks[0];
@@ -961,6 +969,12 @@ class Visualizer {
                     this.smoothMediapipeLandmarks.bind(this)
                 );
                 land = smoothedLeft[smoothedLeft.length - 1];
+                land = land.map(v => { 
+                    v.x *= this.lambda;
+                    v.y *= this.lambda;
+                    v.z *= this.lambda;
+                    return v
+                })
             }
             detections.leftHand.w = land;
         }
@@ -979,6 +993,12 @@ class Visualizer {
                     this.smoothMediapipeLandmarks.bind(this)
                 );
                 land = smoothedright[smoothedright.length - 1];
+                land = land.map(v => { 
+                    v.x *= this.lambda;
+                    v.y *= this.lambda;
+                    v.z *= this.lambda;
+                    return v
+                })
             }
             detections.rightHand.w = land;
         }

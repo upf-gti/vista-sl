@@ -10,6 +10,8 @@ import { transformLandmarks, flipLandmarks, scoreLandmarks, scoreToColor } from 
 import { TrajectoriesHelper } from './js/trajectoriesHelper.js'
 import { Visualizer } from './js/visualizer.js';
 import Stats from 'https://cdnjs.cloudflare.com/ajax/libs/stats.js/r17/Stats.min.js'
+import { AnimationRetargeting, applyTPose } from './js/retargeting.js'
+
 const stats = Stats()
 document.body.appendChild(stats.dom)
 let runningMode = "IMAGE";
@@ -94,47 +96,51 @@ class App {
         this.smoothLandmarks = false;
         this.smoothFrameCount = 3;
         this.visualizer = new Visualizer( this.smoothFrameCount );
+
         window.addEventListener( 'resize', this.onWindowResize.bind(this) );
         window.addEventListener( 'keyup', (e) => { 
-            if(e.key == 's') {
-                this.smoothLandmarks = !this.smoothLandmarks;
-                console.log("Landmarks smoothed: ", this.smoothLandmarks);
-            }
-            if(e.key == 'r') {
-                this.visualizer.smoothRotations = !this.visualizer.smoothRotations;
-                console.log("Rotations smoothed: ", this.visualizer.smoothRotations);
-            }
-            else if( e.key == "+") {
-                this.smoothFrameCount++;
-                this.visualizer.smoothFrameCount = this.smoothFrameCount;
-                console.log("Frame count: ",  this.smoothFrameCount);
-            }
-            else if( e.key == "-") {
-                this.smoothFrameCount--;
-                this.visualizer.smoothFrameCount = this.smoothFrameCount;
-                console.log("Frame count: ",  this.smoothFrameCount);
-            }
-            else if( e.key == "p" ) {
-                if( e.shiftKey ) {
-                    this.visualizer.p-= 0.1;
-                }
-                else {
-                    this.visualizer.p+= 0.1;
-                }
-                console.log(this.visualizer.p);
-            }
-            else if( e.key == "l" ) {
-                if( e.shiftKey ) {
-                    this.visualizer.lambda-=100;
-                }
-                else {
-                    this.visualizer.lambda+=100;
-                }
-                console.log(this.visualizer.lambda);
-            }
-            else if( e.key == "v" ) {
-                this.visualizer.showSkeletons = !this.visualizer.showSkeletons; 
-                this.visualizer.changeVisibility();
+            switch(e.code) {
+                case 'KeyS':
+                    this.smoothLandmarks = !this.smoothLandmarks;
+                    console.log("Landmarks smoothed: ", this.smoothLandmarks);
+                    break;
+                case 'KeyR':
+                    this.visualizer.smoothRotations = !this.visualizer.smoothRotations;
+                    console.log("Rotations smoothed: ", this.visualizer.smoothRotations);
+                    break;
+                case 'NumpadAdd': case 'BracketRight':
+                    this.smoothFrameCount++;
+                    this.visualizer.smoothFrameCount = this.smoothFrameCount;
+                    console.log("Frame count: ",  this.smoothFrameCount);
+                    break;
+                case 'NumpadSubstract': case 'Slash':
+                    this.smoothFrameCount--;
+                    this.visualizer.smoothFrameCount = this.smoothFrameCount;
+                    console.log("Frame count: ",  this.smoothFrameCount);
+                    break;
+                case 'KeyP':
+                    if( e.shiftKey ) {  
+                        this.visualizer.p-= 0.01;
+                    }
+                    else {
+                        this.visualizer.p+= 0.01;
+                    }
+                    console.log(this.visualizer.p);
+                    break;
+                case 'KeyL':
+                    if( e.shiftKey ) {
+                        this.visualizer.lambda-=100;
+                    }
+                    else {
+                        this.visualizer.lambda+=100;
+                    }
+                    console.log(this.visualizer.lambda);
+                    break;
+                case 'KeyV':
+                    this.visualizer.showSkeletons = !this.visualizer.showSkeletons; 
+                    this.visualizer.changeVisibility();
+                    break;
+
             }
         })
     }
@@ -547,7 +553,19 @@ class App {
                     this.trajectoriesHelper.trajectoryEnd = track.times.length;
                     this.trajectoriesHelper.mixer = mixer;
                     this.trajectoriesHelper.computeTrajectories(animation);
-            }
+                }
+                if(this.mode == App.modes.CAMERA) {
+                    if(item.id != "Eva" || item.id != "EvaLow") {
+                        const srcSkeleton = this.visualizer.skeleton = applyTPose(this.visualizer.skeleton).skeleton;
+                        const trgSkeleton = this.performs.currentCharacter.skeleton = applyTPose(this.performs.currentCharacter.skeleton).skeleton;
+                        this.performs.scene.add(new THREE.SkeletonHelper(trgSkeleton.bones[0]))
+                        this.retargeting = new AnimationRetargeting(srcSkeleton, trgSkeleton, {srcPoseMode: AnimationRetargeting.BindPoseModes.DEFAULT, trgPoseMode: AnimationRetargeting.BindPoseModes.CURRENT});
+                        //this.visualizer.loadAvatar( this.performs.currentCharacter )
+                    }
+                    else {
+                        this.retargeting = null;
+                    }
+                }
             
             
 
@@ -868,8 +886,6 @@ class App {
             const height = inputVideo.parentElement.clientHeight;
             const width = height * aspect;
 
-            // canvasVideo.width  =  recordedVideo.style.width = width;
-            // canvasVideo.height =  recordedVideo.style.height = height;
             await this.initMediapipe();
             await this.visualizer.init(this.performs.scene, this.performs.currentCharacter, PoseLandmarker.POSE_CONNECTIONS, HandLandmarker.HAND_CONNECTIONS);
 
@@ -877,9 +893,8 @@ class App {
             
             this.video.classList.remove("hidden");
             // const videoAspect =  this.video.clientHeight / this.video.videoHeight;
-            const offset = this.video.clientHeight/ this.video.videoHeight;
-            this.videoCanvas.height = this.video.clientHeight;
-            this.videoCanvas.width =  this.video.videoWidth*offset;
+            this.videoCanvas.height = height;
+            this.videoCanvas.width =  width;
             this.videoCanvas.classList.remove("hidden");
             
             $('#loading').fadeOut();
@@ -908,6 +923,33 @@ class App {
             }
         }
     }
+
+    draw2DLandmarksWebcam(handLandmarks, poseLandmarks) {
+        const canvasCtx = this.videoCanvas.getContext('2d');
+        canvasCtx.clearRect(0, 0, this.videoCanvas.width, this.videoCanvas.height);
+        if( this.show2DLandmarksVideo ) {
+            // const offset = this.video.clientHeight/ this.video.videoHeight;
+            // this.videoCanvas.height = this.video.clientHeight;
+            // this.videoCanvas.width =  this.video.videoWidth*offset;
+            //const landmarks = this.originalLandmarks[0].landmarks;
+            for(let i = 0; i < handLandmarks.length; i++) {
+                if(handLandmarks[i].length) {
+            
+                    this.drawingVideoUtils.drawConnectors( handLandmarks[i], HandLandmarker.HAND_CONNECTIONS, {color: '#1a2025', lineWidth: 4}); //'#00FF00'
+                    this.drawingVideoUtils.drawLandmarks( handLandmarks[i], {color: this.referenceColor , fillColor: this.referenceColor, lineWidth: 2}); //'#00FF00'
+                }
+            }
+            
+            for(let i = 0; i < poseLandmarks.length; i++) {
+                if(poseLandmarks[i].length) {
+            
+                    this.drawingVideoUtils.drawConnectors( poseLandmarks[i], PoseLandmarker.POSE_CONNECTIONS, {color: '#1a2025', lineWidth: 4}); //'#00FF00'
+                    this.drawingVideoUtils.drawLandmarks( poseLandmarks[i], {color: this.referenceColor , fillColor: this.referenceColor, lineWidth: 2}); //'#00FF00'
+                }
+            }
+        }
+    }
+
     // Waits until delayedResizeTime to actually resize webGL. New calls reset timeout. To avoid slow resizing and crashes.
     delayedResize( width, height ) {
         if ( this.delayedResizeID ) {
@@ -1043,7 +1085,8 @@ class App {
                 rightHand:{l:[], w:[]},
                 retargetLandmarks: false,
             }
-            
+            this.draw2DLandmarksWebcam(detectionsHands.landmarks, detectionsPose.landmarks);
+
             if( detectionsPose.worldLandmarks.length && detectionsPose.worldLandmarks[0]) {
                 
                 detections.body.l = detectionsPose.landmarks[0];
@@ -1068,6 +1111,9 @@ class App {
             }
             this.visualizer.processDetections(detections, PoseLandmarker.POSE_CONNECTIONS, HandLandmarker.HAND_CONNECTIONS);
             this.visualizer.animate();
+            if(this.retargeting) {
+                this.retargeting.retargetPose();
+            }
         }
        
         stats.update()
