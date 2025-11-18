@@ -482,6 +482,14 @@ class App {
             this.loadVideo( signName );
             $('#text').innerText = "Loading video..."
             $('#loading').fadeIn();
+            if( !item.animation ) {
+             
+                await this.initMediapipe();
+                await this.visualizer.init(this.performs.scene, this.performs.currentCharacter, PoseLandmarker.POSE_CONNECTIONS, HandLandmarker.HAND_CONNECTIONS);
+
+                this.mediapipeOnlineEnabler = true;
+                return;
+            }
             try {
                 const response = await fetch( item.animation );
                 if( response.ok ) {
@@ -526,6 +534,7 @@ class App {
             }
         }
         else {
+
             this.performs.loadAvatar( item.src, 0 , new THREE.Quaternion(), item.id, () => {
                 this.performs.changeAvatar( item.id );
     
@@ -662,7 +671,7 @@ class App {
     async loadVideo( signName ) {
 
         const landmarksDataUrl = 'https://catsl.eelvex.net/static/vid_data/teacher-' + signName + '/teacher-' + signName + '_keyframe_1.json';
-        this.video.src = `https://catsl.eelvex.net/static/vid/teacher-${signName}.mp4`; // "teacher-video-Ψ.mp4";
+        this.video.src = encodeURI(`https://vistasl.eelvex.net/static/vid/teacher-${signName}.mp4`)// `https://catsl.eelvex.net/static/vid/teacher-${signName}.mp4`; // "teacher-video-Ψ.mp4";
 
         const canvasCtx = this.characterCanvas.getContext('2d');
         canvasCtx.clearRect(0, 0, this.characterCanvas.width, this.characterCanvas.height);
@@ -981,7 +990,7 @@ class App {
 
     async animate( dt ) {
 
-        if( this.mode == App.modes.VIDEO ) {
+        if( this.mode == App.modes.VIDEO && !this.mediapipeOnlineEnabler ) {
             this.mediapipeScene.leftHandPoints.visible = false;
             this.mediapipeScene.rightHandPoints.visible = false;
 
@@ -1072,7 +1081,7 @@ class App {
 
             this.trajectoriesHelper.updateTrajectories( this.window.start, this.window.end );
         }
-        else if( this.handLandmarker && this.poseLandmarker && this.mode == App.modes.CAMERA ) {
+        else if( this.handLandmarker && this.poseLandmarker ) {
             // Convert 3D canvas ( three scene ) into image to send it to Mediapipe
             const bitmap = await createImageBitmap(this.video);
 
