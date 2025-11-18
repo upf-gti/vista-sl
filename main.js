@@ -10,6 +10,11 @@ import { transformLandmarks, flipLandmarks, scoreLandmarks, scoreToColor } from 
 import { TrajectoriesHelper } from './js/trajectoriesHelper.js'
 import { Visualizer } from './js/visualizer.js';
 import Stats from 'https://cdnjs.cloudflare.com/ajax/libs/stats.js/r17/Stats.min.js'
+<<<<<<< Updated upstream
+=======
+import { AnimationRetargeting, applyTPose } from './js/retargeting.js'
+import { MediaPipe } from './js/mediapipe.js';
+>>>>>>> Stashed changes
 const stats = Stats()
 document.body.appendChild(stats.dom)
 let runningMode = "IMAGE";
@@ -70,6 +75,7 @@ class App {
         this.originalLandmarks3D = [];
         
         // Mediapipe
+        this.mediapipe = null;
         this.handLandmarker = null;
         this.drawingVideoUtils = null;
         this.drawingCharacterUtils = null;
@@ -91,9 +97,16 @@ class App {
 
         this.camera = this.performs.cameras[this.performs.camera].clone();
 
+<<<<<<< Updated upstream
         this.prevBodyLandmarks = [];
         this.prevHandsLandmarks = [];
         this.visualizer = new Visualizer();
+=======
+        this.smoothLandmarks = true;
+        this.smoothFrameCount = 3;
+        this.visualizer = new Visualizer( this.smoothFrameCount );
+
+>>>>>>> Stashed changes
         window.addEventListener( 'resize', this.onWindowResize.bind(this) );
     }
 
@@ -110,7 +123,7 @@ class App {
         }
 
         
-        this.assetData = [  { id: "Characters", icon: "PersonStanding", type: "folder", children: avatars }, { id: "Videos", icon: "Film", type: "folder", children: this.animationsMap.data, closed: true }, {id: "Webcam", type: "", preview: "https://icons.iconarchive.com/icons/cornmanthe3rd/plex/512/System-webcam-icon.png"}];
+        this.assetData = [  { id: "Characters", icon: "PersonStanding", type: "folder", children: avatars }, { id: "Videos", icon: "Film", type: "folder", children: this.animationsMap.data, closed: true }, {id: "Webcam", type: "", preview: "https://cdn3d.iconscout.com/3d/premium/thumb/webcam-3d-icon-png-download-9580716.png"}];
         // for(let name in this.animationsMap) {
         //    this.assetData.push( { id: name, type: "video", src: `https://catsl.eelvex.net/static/vid/teacher-${name}.mp4` }); //`https://catsl.eelvex.net/static/vid/teacher-${name}.mp4` //"teacher-video-Ψ.mp4"
         // }
@@ -119,6 +132,8 @@ class App {
 
         await this.createGUI();
         this.createMediapipeScene();
+
+        this.mediapipe = new MediaPipe(this.videoCanvas);
 
         this.drawingVideoUtils = new DrawingUtils( this.videoCanvas.getContext("2d") );
         this.drawingCharacterUtils = new DrawingUtils( this.characterCanvas.getContext("2d") );
@@ -269,7 +284,6 @@ class App {
                 case LX.AssetViewEvent.ASSET_SELECTED:
                     if(e.item.id == "Webcam") {
                         this.mode = App.modes.CAMERA;
-                        
                         this.prepareWebcamRecording();
                     }
                     console.log("selected")
@@ -282,6 +296,9 @@ class App {
                     break;
                 case LX.AssetViewEvent.ASSET_DBLCLICKED:
                     console.log("double clicked")
+                    if(e.item.id == "Webcam") {
+                        return;
+                    }
                     this.loadAsset( e.item );
                     break;
                 case LX.AssetViewEvent.ASSET_CHECKED:
@@ -337,7 +354,7 @@ class App {
 
         this.videoEditor.onSetTime = (t) => {
             this.window.moveWindow( t );
-            this.trajectoriesHelper.updateTrajectories( this.window.start, this.window.end );
+            // this.trajectoriesHelper.updateTrajectories( this.window.start, this.window.end );
         }
 
         this.videoEditor.onChangeSpeed = (v) => {
@@ -354,10 +371,10 @@ class App {
         this.videoEditor.timebar.onMouse = ( e ) => this.window.onMouse( e );
         this.videoEditor.timebar.onDraw = () => this.window.draw();
         this.window.onChangeStart = ( startTime ) => {
-            this.trajectoriesHelper.updateTrajectories( this.window.start, this.window.end );;
+            // this.trajectoriesHelper.updateTrajectories( this.window.start, this.window.end );;
         }
         this.window.onChangeEnd = ( endTime ) => {
-            this.trajectoriesHelper.updateTrajectories( this.window.start, this.window.end );;
+            // this.trajectoriesHelper.updateTrajectories( this.window.start, this.window.end );;
         }
         this.window.onHover = ( e ) => {
             const x = e.target.offsetLeft + e.offsetX;
@@ -431,9 +448,44 @@ class App {
         if( item.type == "video" ) {
             const signName = item.id;
             this.selectedVideo = signName;
-            this.loadVideo( signName );
+            await this.loadVideo( signName );
             $('#text').innerText = "Loading video..."
             $('#loading').fadeIn();
+<<<<<<< Updated upstream
+=======
+            if( !item.animation ) {
+             
+                await this.mediapipe.init();
+                this.handLandmarker = this.mediapipe.handDetector;
+                this.poseLandmarker = this.mediapipe.poseDetector;
+                this.videoEditor.onVideoLoaded = async () => {
+                    
+                    // await this.initMediapipe();
+                    await this.mediapipe.processVideoOffline( this.video, {callback: async ( ) => {
+                        const landmarks = this.mediapipe.landmarks;
+                        const blendshapes = this.mediapipe.blendshapes;
+                        const rawData = this.mediapipe.rawData;
+                        await this.visualizer.init(this.performs.scene, this.performs.currentCharacter, PoseLandmarker.POSE_CONNECTIONS, HandLandmarker.HAND_CONNECTIONS);
+                        const animation = this.visualizer.createBodyAnimationFromWorldLandmarks( landmarks, this.performs.currentCharacter.skeleton )
+                        // const animationData = this.visualizer.retargeting.retargetAnimation( animation );
+                        this.performs.keyframeApp.loadedAnimations[signName] = {
+                            name: signName,
+                            bodyAnimation: animation ?? new THREE.AnimationClip( "bodyAnimation", -1, [] ),
+                            skeleton: this.performs.currentCharacter.skeleton,
+                            model: this.performs.currentCharacter.model,
+                            type: "glb"
+                        };
+                        
+                        // this.performs.keyframeApp.bindAnimationToCharacter( signName, this.performs.currentCharacter.model.name);
+                        this.performs.keyframeApp.onChangeAnimation(signName, true);
+                        this.performs.keyframeApp.changePlayState(false);
+                        requestAnimationFrame(this.animate.bind(this));
+                    }} );
+                    // this.mediapipeOnlineEnabler = true;
+                }
+                return;
+            }
+>>>>>>> Stashed changes
             try {
                 const response = await fetch( item.animation );
                 if( response.ok ) {
@@ -505,7 +557,22 @@ class App {
                     this.trajectoriesHelper.trajectoryEnd = track.times.length;
                     this.trajectoriesHelper.mixer = mixer;
                     this.trajectoriesHelper.computeTrajectories(animation);
+<<<<<<< Updated upstream
             }
+=======
+                }
+                if(this.mode == App.modes.CAMERA) {
+                    if(item.id != "Eva" || item.id != "EvaLow") {
+                        const srcSkeleton = this.visualizer.skeleton = applyTPose(this.visualizer.skeleton).skeleton;
+                        const trgSkeleton = this.performs.currentCharacter.skeleton = applyTPose(this.performs.currentCharacter.skeleton).skeleton;
+                        this.retargeting = new AnimationRetargeting(srcSkeleton, trgSkeleton, {srcPoseMode: AnimationRetargeting.BindPoseModes.DEFAULT, trgPoseMode: AnimationRetargeting.BindPoseModes.CURRENT});
+                        //this.visualizer.loadAvatar( this.performs.currentCharacter )
+                    }
+                    else {
+                        this.retargeting = null;
+                    }
+                }
+>>>>>>> Stashed changes
             
             
 
@@ -602,8 +669,13 @@ class App {
     async loadVideo( signName ) {
 
         const landmarksDataUrl = 'https://catsl.eelvex.net/static/vid_data/teacher-' + signName + '/teacher-' + signName + '_keyframe_1.json';
+<<<<<<< Updated upstream
         this.video.src = `https://catsl.eelvex.net/static/vid/teacher-${signName}.mp4`; // "teacher-video-Ψ.mp4";
 
+=======
+        this.video.crossOrigin = "anonymous";
+        this.video.src = encodeURI(`https://vistasl.eelvex.net/static/vid/teacher-${signName}.mp4`)// `https://catsl.eelvex.net/static/vid/teacher-${signName}.mp4`; // "teacher-video-Ψ.mp4";
+>>>>>>> Stashed changes
         const canvasCtx = this.characterCanvas.getContext('2d');
         canvasCtx.clearRect(0, 0, this.characterCanvas.width, this.characterCanvas.height);
 
@@ -841,10 +913,17 @@ class App {
             
             const height = inputVideo.parentElement.clientHeight;
             const width = height * aspect;
+<<<<<<< Updated upstream
 
             // canvasVideo.width  =  recordedVideo.style.width = width;
             // canvasVideo.height =  recordedVideo.style.height = height;
             await this.initMediapipe();
+=======
+            await this.mediapipe.init();
+            this.handLandmarker = this.mediapipe.handDetector;
+            this.poseLandmarker = this.mediapipe.poseDetector;
+            // await this.initMediapipe();
+>>>>>>> Stashed changes
             await this.visualizer.init(this.performs.scene, this.performs.currentCharacter, PoseLandmarker.POSE_CONNECTIONS, HandLandmarker.HAND_CONNECTIONS);
 
             this.mediapipeOnlineEnabler = true;
@@ -1062,14 +1141,19 @@ class App {
                 this.mediapipeScene.renderer.render(this.mediapipeScene.scene, this.performs.cameras[this.performs.camera]);
             }
 
-            this.trajectoriesHelper.updateTrajectories( this.window.start, this.window.end );
+            // this.trajectoriesHelper.updateTrajectories( this.window.start, this.window.end );
         }
+<<<<<<< Updated upstream
         else if( this.handLandmarker && this.poseLandmarker && this.mode == App.modes.CAMERA ) {
+=======
+        else if( this.mediapipe && this.handLandmarker && this.poseLandmarker ) {
+>>>>>>> Stashed changes
             // Convert 3D canvas ( three scene ) into image to send it to Mediapipe
             const bitmap = await createImageBitmap(this.video);
-
-            const detectionsHands = this.handLandmarker.detect(bitmap);
-            const detectionsPose = this.poseLandmarker.detect(bitmap);
+            await this.mediapipe.processFrame(this.video);
+            console.log(this.mediapipe.currentResults)
+            // const detectionsHands = this.handLandmarker.detect(bitmap);
+            // const detectionsPose = this.poseLandmarker.detect(bitmap);
             bitmap.close();
             const detections = {
                 body:{l:[], w:[]},
@@ -1077,6 +1161,7 @@ class App {
                 rightHand:{l:[], w:[]},
                 retargetLandmarks: false,
             }
+<<<<<<< Updated upstream
             if( detectionsPose.worldLandmarks.length && detectionsPose.worldLandmarks[0]) {
                 let land = detectionsPose.worldLandmarks[0];
                 if(this.prevBodyLandmarks.length == 15) {
@@ -1114,6 +1199,38 @@ class App {
                     dst.l = detectionsHands.landmarks[ i ]
                     dst.w = detectionsHands.worldLandmarks[ i ]
                 }
+=======
+            // this.draw2DLandmarksWebcam(detectionsHands.landmarks, detectionsPose.landmarks);
+            this.draw2DLandmarksWebcam(this.handLandmarker.landmarks, this.poseLandmarker.landmarks);
+            const results = this.mediapipe.currentResults;
+            detections.body.l = results.landmarksResults.PLM || [];
+            detections.body.w = results.landmarksResults.PWLM || [];
+            detections.leftHand.l = results.landmarksResults.LLM || [];
+            detections.leftHand.w = results.landmarksResults.LWLM || [];
+            detections.rightHand.l = results.landmarksResults.RLM || [];
+            detections.rightHand.w = results.landmarksResults.RWLM || [];
+            // if( detectionsPose.worldLandmarks.length && detectionsPose.worldLandmarks[0]) {
+                
+            //     detections.body.l = detectionsPose.landmarks[0];
+            //     detections.body.w =detectionsPose.worldLandmarks[0];
+            // }
+            
+            // if( detectionsHands.worldLandmarks.length ) {
+            //     for( let i = 0; i < detectionsHands.handednesses.length; ++i ){
+            //         let h = detectionsHands.handednesses[i][0];                    
+            //         if( h.categoryName == 'Left' ){                        
+            //             detections.leftHand.l = detectionsHands.landmarks[i];
+            //             detections.leftHand.w = detectionsHands.worldLandmarks[i];
+            //         }
+            //         else{
+            //             detections.rightHand.l = detectionsHands.landmarks[i];
+            //             detections.rightHand.w = detectionsHands.worldLandmarks[i];
+            //         }
+            //     }
+            // }
+            if( this.smoothLandmarks ) {
+                detections = this.visualizer.smoothDetections(detections, this.smoothFrameCount);
+>>>>>>> Stashed changes
             }
             this.visualizer.processDetections(detections, PoseLandmarker.POSE_CONNECTIONS, HandLandmarker.HAND_CONNECTIONS);
             this.visualizer.animate();

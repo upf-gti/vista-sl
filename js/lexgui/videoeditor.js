@@ -748,6 +748,9 @@ class VideoEditor {
                 this.endTime = this.video.duration;
                 this.timebar.setDuration( this.endTime );
                 this.timebar.setEndTime( this.endTime );
+                if( this.onVideoLoaded ) {
+                    this.onVideoLoaded( this.video );
+                }
             }
             this.video.currentTime = this.startTime;
             this.timebar.setCurrentTime( this.video.currentTime );
