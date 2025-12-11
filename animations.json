@@ -2,10 +2,30 @@
      "data": [
 
         {"id": "Alphabet", "type": "folder", "children": [
-            { "id":"video-Ω", "src": "https://catsl.eelvex.net/static/vid/teacher-video-Ω.mp4","animation": "https://signon-lfs.gti.upf.edu/files/evalls/animics/clips/GSL-Omega.bvhe", "type": "video" },
-            { "id":"video-Ψ", "src": "https://catsl.eelvex.net/static/vid/teacher-video-Ψ.mp4","animation": "https://signon-lfs.gti.upf.edu/files/evalls/animics/clips/GSL-Psi.bvhe", "type": "video" },
-            { "id":"video-H", "src": "https://catsl.eelvex.net/static/vid/teacher-video-H.mp4","animation": "https://signon-lfs.gti.upf.edu/files/evalls/animics/clips/GSL-H.bvhe", "type": "video" },
-            { "id":"video-N", "src": "https://catsl.eelvex.net/static/vid/teacher-video-N.mp4","animation": "https://signon-lfs.gti.upf.edu/files/evalls/animics/clips/video-N.bvhe", "type": "video" }
+            { "id":"video-Α", "src": "https://vistasl.eelvex.net/static/vid/teacher-video-%CE%91.mp4","animation": "", "type": "video" },
+            { "id":"video-Β", "src": "https://vistasl.eelvex.net/static/vid/teacher-video-%CE%92.mp4","animation": "", "type": "video" },
+            { "id":"video-Γ", "src": "https://vistasl.eelvex.net/static/vid/teacher-video-%CE%93.mp4","animation": "", "type": "video" },
+            { "id":"video-Δ", "src": "https://vistasl.eelvex.net/static/vid/teacher-video-%CE%94.mp4","animation": "", "type": "video" },
+            { "id":"video-Ε", "src": "https://vistasl.eelvex.net/static/vid/teacher-video-%CE%95.mp4","animation": "", "type": "video" },
+            { "id":"video-Ζ", "src": "https://vistasl.eelvex.net/static/vid/teacher-video-%CE%96.mp4","animation": "", "type": "video" },
+            { "id":"video-Η", "src": "https://vistasl.eelvex.net/static/vid/teacher-video-%CE%97.mp4","animation": "https://signon-lfs.gti.upf.edu/files/evalls/animics/clips/GSL-H.bvhe", "type": "video" },
+            { "id":"video-Θ", "src": "https://vistasl.eelvex.net/static/vid/teacher-video-%CE%98.mp4","animation": "", "type": "video" },
+            { "id":"video-Ι", "src": "https://vistasl.eelvex.net/static/vid/teacher-video-%CE%99.mp4","animation": "", "type": "video" },
+            { "id":"video-Κ", "src": "https://vistasl.eelvex.net/static/vid/teacher-video-%CE%9A.mp4","animation": "", "type": "video" },
+            { "id":"video-Λ", "src": "https://vistasl.eelvex.net/static/vid/teacher-video-%CE%9B.mp4","animation": "", "type": "video" },
+            { "id":"video-Μ", "src": "https://vistasl.eelvex.net/static/vid/teacher-video-%CE%9C.mp4","animation": "", "type": "video" },
+            { "id":"video-Ν", "src": "https://vistasl.eelvex.net/static/vid/teacher-video-%CE%9D.mp4","animation": "https://signon-lfs.gti.upf.edu/files/evalls/animics/clips/video-N.bvhe", "type": "video" },
+            { "id":"video-Ξ", "src": "https://vistasl.eelvex.net/static/vid/teacher-video-%CE%9E.mp4","animation": "", "type": "video" },
+            { "id":"video-Ο", "src": "https://vistasl.eelvex.net/static/vid/teacher-video-%CE%9F.mp4","animation": "", "type": "video" },
+            { "id":"video-Π", "src": "https://vistasl.eelvex.net/static/vid/teacher-video-%CE%A0.mp4","animation": "https://signon-lfs.gti.upf.edu/files/evalls/animics/clips/GSL-H.bvhe", "type": "video" },
+            { "id":"video-Ρ", "src": "https://vistasl.eelvex.net/static/vid/teacher-video-%CE%A1.mp4","animation": "", "type": "video" },
+            { "id":"video-Σ", "src": "https://vistasl.eelvex.net/static/vid/teacher-video-%CE%A3.mp4","animation": "", "type": "video" },
+            { "id":"video-Τ", "src": "https://vistasl.eelvex.net/static/vid/teacher-video-%CE%A4.mp4","animation": "", "type": "video" },
+            { "id":"video-Υ", "src": "https://vistasl.eelvex.net/static/vid/teacher-video-%CE%A5.mp4","animation": "", "type": "video" },
+            { "id":"video-Φ", "src": "https://vistasl.eelvex.net/static/vid/teacher-video-%CE%A6.mp4","animation": "", "type": "video" },
+            { "id":"video-X", "src": "https://vistasl.eelvex.net/static/vid/teacher-video-%CE%A7.mp4","animation": "", "type": "video" },
+            { "id":"video-Ψ", "src": "https://vistasl.eelvex.net/static/vid/teacher-video-%CE%A8.mp4","animation": "https://signon-lfs.gti.upf.edu/files/evalls/animics/clips/GSL-Psi.bvhe", "type": "video" },
+            { "id":"video-Ω", "src": "https://vistasl.eelvex.net/static/vid/teacher-video-%CE%A9.mp4","animation": "https://signon-lfs.gti.upf.edu/files/evalls/animics/clips/GSL-Omega.bvhe", "type": "video" }
         ]},
         {"id": "Family", "type": "folder", "children": [
             { "id": "video-Χωρίζω", "src": "https://catsl.eelvex.net/static/vid/teacher-video-Χωρίζω.mp4", "animation": "https://signon-lfs.gti.upf.edu/files/evalls/animics/clips/GSL-Divide.bvhe", "type": "video" }

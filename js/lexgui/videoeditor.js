@@ -741,6 +741,10 @@ class VideoEditor {
         this.video.addEventListener( "canplaythrough", forceLoadChunks, { passive: true } );
 
         this.video.ondurationchange = ( v ) => {
+            if( this.video.duration == Infinity ) {
+                return;
+            }
+
             if( this.video.duration != this.endTime ) {
 
                 this.video.currentTime = this.startTime;

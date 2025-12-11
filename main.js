@@ -10,11 +10,8 @@ import { transformLandmarks, flipLandmarks, scoreLandmarks, scoreToColor } from 
 import { TrajectoriesHelper } from './js/trajectoriesHelper.js'
 import { Visualizer } from './js/visualizer.js';
 import Stats from 'https://cdnjs.cloudflare.com/ajax/libs/stats.js/r17/Stats.min.js'
-<<<<<<< Updated upstream
-=======
 import { AnimationRetargeting, applyTPose } from './js/retargeting.js'
 import { MediaPipe } from './js/mediapipe.js';
->>>>>>> Stashed changes
 const stats = Stats()
 document.body.appendChild(stats.dom)
 let runningMode = "IMAGE";
@@ -97,17 +94,63 @@ class App {
 
         this.camera = this.performs.cameras[this.performs.camera].clone();
 
-<<<<<<< Updated upstream
-        this.prevBodyLandmarks = [];
-        this.prevHandsLandmarks = [];
-        this.visualizer = new Visualizer();
-=======
         this.smoothLandmarks = true;
         this.smoothFrameCount = 3;
         this.visualizer = new Visualizer( this.smoothFrameCount );
 
->>>>>>> Stashed changes
         window.addEventListener( 'resize', this.onWindowResize.bind(this) );
+
+        window.addEventListener( 'keyup', (e) => { 
+
+            switch(e.code) {
+                case 'KeyS':
+                    this.smoothLandmarks = !this.smoothLandmarks;
+                    console.log("Landmarks smoothed: ", this.smoothLandmarks);
+                    break;
+
+                case 'KeyR':
+                    this.visualizer.smoothRotations = !this.visualizer.smoothRotations;
+                    console.log("Rotations smoothed: ", this.visualizer.smoothRotations);
+                    break;
+
+                case 'NumpadAdd': case 'BracketRight':
+                    this.smoothFrameCount++;
+                    this.visualizer.smoothFrameCount = this.smoothFrameCount;
+                    console.log("Frame count: ",  this.smoothFrameCount);
+                    break;
+
+                case 'NumpadSubstract': case 'Slash':
+                    this.smoothFrameCount--;
+                    this.visualizer.smoothFrameCount = this.smoothFrameCount;
+                    console.log("Frame count: ",  this.smoothFrameCount);
+                    break;
+
+                case 'KeyP':
+                    if( e.shiftKey ) {  
+                        this.visualizer.p-= 0.01;
+                    }
+                    else {
+                        this.visualizer.p+= 0.01;
+                    }
+                    console.log(this.visualizer.p);
+                    break;
+
+                case 'KeyL':
+                    if( e.shiftKey ) {
+                        this.visualizer.lambda-=100;
+                    }
+                    else {
+                        this.visualizer.lambda+=100;
+                    }
+                    console.log(this.visualizer.lambda);
+                    break;
+
+                case 'KeyV':
+                    this.visualizer.showSkeletons = !this.visualizer.showSkeletons; 
+                    this.visualizer.changeVisibility();
+                    break;
+            }
+        })
     }
 
     onWindowResize() {
@@ -139,6 +182,7 @@ class App {
         this.drawingCharacterUtils = new DrawingUtils( this.characterCanvas.getContext("2d") );
 
         this.delayedResize(this.characterCanvas.parentElement.clientWidth, this.characterCanvas.parentElement.clientHeight);
+        this.animate();
     }
 
     async createGUI() {
@@ -282,9 +326,12 @@ class App {
         this.assetView.load( this.assetData, async ( e ) => {
             switch( e.type ) {
                 case LX.AssetViewEvent.ASSET_SELECTED:
-                    if(e.item.id == "Webcam") {
+                    if(e.item.id == "Webcam" && this.mode != App.modes.CAMERA) {
+                        if( this.trajectoriesHelper ) {
+                            this.trajectoriesHelper.hide();
+                        }
+                        await this.prepareWebcamRecording();
                         this.mode = App.modes.CAMERA;
-                        this.prepareWebcamRecording();
                     }
                     console.log("selected")
                     break;
@@ -354,7 +401,7 @@ class App {
 
         this.videoEditor.onSetTime = (t) => {
             this.window.moveWindow( t );
-            // this.trajectoriesHelper.updateTrajectories( this.window.start, this.window.end );
+            this.trajectoriesHelper.updateTrajectories( this.window.start, this.window.end );
         }
 
         this.videoEditor.onChangeSpeed = (v) => {
@@ -371,10 +418,10 @@ class App {
         this.videoEditor.timebar.onMouse = ( e ) => this.window.onMouse( e );
         this.videoEditor.timebar.onDraw = () => this.window.draw();
         this.window.onChangeStart = ( startTime ) => {
-            // this.trajectoriesHelper.updateTrajectories( this.window.start, this.window.end );;
+            this.trajectoriesHelper.updateTrajectories( this.window.start, this.window.end );;
         }
         this.window.onChangeEnd = ( endTime ) => {
-            // this.trajectoriesHelper.updateTrajectories( this.window.start, this.window.end );;
+            this.trajectoriesHelper.updateTrajectories( this.window.start, this.window.end );;
         }
         this.window.onHover = ( e ) => {
             const x = e.target.offsetLeft + e.offsetX;
@@ -446,46 +493,93 @@ class App {
 
     async loadAsset( item ) {
         if( item.type == "video" ) {
+            this.video.srcObject = null;
+            this.mode = App.modes.VIDEO;
+
             const signName = item.id;
             this.selectedVideo = signName;
-            await this.loadVideo( signName );
-            $('#text').innerText = "Loading video..."
+            await this.loadVideo( signName, item.src );
+            $('#text')[0].innerText = "Loading video..."
             $('#loading').fadeIn();
-<<<<<<< Updated upstream
-=======
+            this.performs.keyframeApp.changePlayState(false);
+            this.performs.keyframeApp.mixer.setTime(0);
+            if(this.performs.keyframeApp.mixer._actions.length)
+            {
+                this.performs.keyframeApp.mixer.stopAllAction();
+                this.performs.keyframeApp.mixer.uncacheAction(this.performs.keyframeApp.mixer._actions[0]);
+                this.performs.keyframeApp.mixer._actions = [];
+            }
             if( !item.animation ) {
              
                 await this.mediapipe.init();
                 this.handLandmarker = this.mediapipe.handDetector;
                 this.poseLandmarker = this.mediapipe.poseDetector;
+                $('#text')[0].innerText = "Generating animation...";
+                $('#loading').fadeTo(0, 0.6);
                 this.videoEditor.onVideoLoaded = async () => {
-                    
                     // await this.initMediapipe();
-                    await this.mediapipe.processVideoOffline( this.video, {callback: async ( ) => {
-                        const landmarks = this.mediapipe.landmarks;
-                        const blendshapes = this.mediapipe.blendshapes;
-                        const rawData = this.mediapipe.rawData;
-                        await this.visualizer.init(this.performs.scene, this.performs.currentCharacter, PoseLandmarker.POSE_CONNECTIONS, HandLandmarker.HAND_CONNECTIONS);
-                        const animation = this.visualizer.createBodyAnimationFromWorldLandmarks( landmarks, this.performs.currentCharacter.skeleton )
-                        // const animationData = this.visualizer.retargeting.retargetAnimation( animation );
-                        this.performs.keyframeApp.loadedAnimations[signName] = {
-                            name: signName,
-                            bodyAnimation: animation ?? new THREE.AnimationClip( "bodyAnimation", -1, [] ),
-                            skeleton: this.performs.currentCharacter.skeleton,
-                            model: this.performs.currentCharacter.model,
-                            type: "glb"
-                        };
-                        
-                        // this.performs.keyframeApp.bindAnimationToCharacter( signName, this.performs.currentCharacter.model.name);
-                        this.performs.keyframeApp.onChangeAnimation(signName, true);
-                        this.performs.keyframeApp.changePlayState(false);
-                        requestAnimationFrame(this.animate.bind(this));
-                    }} );
+                    if( this.buildAnimation ) {
+                        setTimeout(async () => {
+                            await this.mediapipe.processVideoOffline( this.video, {callback: async ( ) => {
+                                const landmarks = this.mediapipe.landmarks;
+                                const blendshapes = this.mediapipe.blendshapes;
+                                const rawData = this.mediapipe.rawData;
+                                if( !this.visualizer.scene ) {
+                                    await this.visualizer.init(this.performs.scene, this.performs.currentCharacter, PoseLandmarker.POSE_CONNECTIONS, HandLandmarker.HAND_CONNECTIONS);
+                                }
+                                
+                                const animation = this.visualizer.createBodyAnimationFromWorldLandmarks( landmarks, this.performs.currentCharacter.skeleton )
+                                // const animationData = this.visualizer.retargeting.retargetAnimation( animation );
+                                this.performs.keyframeApp.loadedAnimations[signName] = {
+                                    name: signName,
+                                    bodyAnimation: animation ?? new THREE.AnimationClip( "bodyAnimation", -1, [] ),
+                                    skeleton: this.performs.currentCharacter.skeleton,
+                                    model: this.performs.currentCharacter.model,
+                                    type: "glb"
+                                };
+                                
+                                // this.performs.keyframeApp.bindAnimationToCharacter( signName, this.performs.currentCharacter.model.name);
+                                this.performs.keyframeApp.onChangeAnimation(signName, true);
+                                this.performs.keyframeApp.changePlayState(false);
+    
+                                this.trajectoriesHelper.mixer = this.performs.keyframeApp.mixer;
+                                if( this.performs.keyframeApp.currentAnimation ) {
+                                    const animation = this.performs.keyframeApp.bindedAnimations[this.performs.keyframeApp.currentAnimation][this.performs.currentCharacter.model.name];
+                                    let boneName = null;
+                                    for(let i = 0; i < animation.mixerBodyAnimation.tracks.length; i++) {
+                                        const track = animation.mixerBodyAnimation.tracks[i]
+                                        const trackName = track.name;
+                                        for(let trajectory in this.trajectoriesHelper.trajectories) {
+                                            
+                                            if(trackName.includes(trajectory+".") || trackName.includes(trajectory.replace("4","EndSite")+".")) {
+                                                boneName = trackName.replace(".quaternion", "");
+                                                if(boneName) {
+                                                    this.trajectoriesHelper.trajectories[trajectory].name = boneName;
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                    }
+                                    this.trajectoriesHelper.computeTrajectories(animation);
+                                }
+                                this.video.currentTime = 0;
+                                if( this.showTrajectories ) {
+                                    this.trajectoriesHelper.show();
+                                }
+                                else {
+                                    this.trajectoriesHelper.hide();
+                                }
+                                this.videoCanvas.classList.add("hidden");
+                                $('#loading').fadeTo(0.6,1);
+                                $('#loading').fadeOut();
+                            }} );
+                        } ,1000)
+                    }
+                    
                     // this.mediapipeOnlineEnabler = true;
                 }
                 return;
             }
->>>>>>> Stashed changes
             try {
                 const response = await fetch( item.animation );
                 if( response.ok ) {
@@ -557,9 +651,6 @@ class App {
                     this.trajectoriesHelper.trajectoryEnd = track.times.length;
                     this.trajectoriesHelper.mixer = mixer;
                     this.trajectoriesHelper.computeTrajectories(animation);
-<<<<<<< Updated upstream
-            }
-=======
                 }
                 if(this.mode == App.modes.CAMERA) {
                     if(item.id != "Eva" || item.id != "EvaLow") {
@@ -572,7 +663,6 @@ class App {
                         this.retargeting = null;
                     }
                 }
->>>>>>> Stashed changes
             
             
 
@@ -666,16 +756,11 @@ class App {
         }, {size:["50%", "auto"], draggable: true, })
     }
    
-    async loadVideo( signName ) {
+    async loadVideo( signName, src ) {
 
         const landmarksDataUrl = 'https://catsl.eelvex.net/static/vid_data/teacher-' + signName + '/teacher-' + signName + '_keyframe_1.json';
-<<<<<<< Updated upstream
-        this.video.src = `https://catsl.eelvex.net/static/vid/teacher-${signName}.mp4`; // "teacher-video-Ψ.mp4";
-
-=======
         this.video.crossOrigin = "anonymous";
-        this.video.src = encodeURI(`https://vistasl.eelvex.net/static/vid/teacher-${signName}.mp4`)// `https://catsl.eelvex.net/static/vid/teacher-${signName}.mp4`; // "teacher-video-Ψ.mp4";
->>>>>>> Stashed changes
+        this.video.src = src ? src : `https://vistasl.eelvex.net/static/vid/teacher-${encodeURIComponent(signName)}.mp4`;// `https://catsl.eelvex.net/static/vid/teacher-${signName}.mp4`; // "teacher-video-Ψ.mp4";
         const canvasCtx = this.characterCanvas.getContext('2d');
         canvasCtx.clearRect(0, 0, this.characterCanvas.width, this.characterCanvas.height);
 
@@ -690,9 +775,6 @@ class App {
             this.videoCanvas.height = this.video.clientHeight;
             this.videoCanvas.width =  this.video.videoWidth*offset;
             this.videoCanvas.classList.remove("hidden");
-
-            $('#loading').fadeOut();
-            $('#text').innerText = "Loading character..."
 
             // Hide info
             document.getElementById("select-video").classList.add("hidden");
@@ -763,7 +845,6 @@ class App {
             }
             this.videoEditor.showControls();
             this.videoEditor.loadVideo({controls: true});
-            requestAnimationFrame(this.animate.bind(this));
         }
 
         this.video.onplay = (e) => {
@@ -892,57 +973,63 @@ class App {
 
         // this.createCaptureArea();
         // this.enable();
-
+        $('#text')[0].innerText = "Preparing camera..."
+        $('#loading').fadeIn();
+        this.videoEditor.hideControls();
+        if(this.performs.keyframeApp.mixer._actions.length)
+        {
+            this.performs.keyframeApp.mixer.stopAllAction();
+            this.performs.keyframeApp.mixer.uncacheAction(this.performs.keyframeApp.mixer._actions[0]);
+            this.performs.keyframeApp.mixer._actions = [];
+        }
         const constraints = { video: true, audio: false, width: 1280, height: 720 };
         const stream = await navigator.mediaDevices.getUserMedia(constraints);
         
         const inputVideo = this.video; // this video will hold the camera stream
         const canvasVideo = this.videoCanvas; // this canvas will output image, landmarks (and edges)
-
+        inputVideo.src = "";
         if( !inputVideo.srcObject ) {
             inputVideo.srcObject = stream;
         }
 
-        inputVideo.onloadedmetadata = ( async (e) => {
+        return new Promise( (resolve, reject) => {
+            inputVideo.onloadedmetadata = ( async (e) => {
 
-            inputVideo.play();
-            console.log(inputVideo.videoWidth)
-            console.log(inputVideo.videoHeight);
-            
-            const aspect = inputVideo.videoWidth / inputVideo.videoHeight;
-            
-            const height = inputVideo.parentElement.clientHeight;
-            const width = height * aspect;
-<<<<<<< Updated upstream
-
-            // canvasVideo.width  =  recordedVideo.style.width = width;
-            // canvasVideo.height =  recordedVideo.style.height = height;
-            await this.initMediapipe();
-=======
-            await this.mediapipe.init();
-            this.handLandmarker = this.mediapipe.handDetector;
-            this.poseLandmarker = this.mediapipe.poseDetector;
-            // await this.initMediapipe();
->>>>>>> Stashed changes
-            await this.visualizer.init(this.performs.scene, this.performs.currentCharacter, PoseLandmarker.POSE_CONNECTIONS, HandLandmarker.HAND_CONNECTIONS);
-
-            this.mediapipeOnlineEnabler = true;
-            
-            this.video.classList.remove("hidden");
-            // const videoAspect =  this.video.clientHeight / this.video.videoHeight;
-            const offset = this.video.clientHeight/ this.video.videoHeight;
-            this.videoCanvas.height = this.video.clientHeight;
-            this.videoCanvas.width =  this.video.videoWidth*offset;
-            this.videoCanvas.classList.remove("hidden");
-            
-            $('#loading').fadeOut();
-            $('#text').innerText = "Loading character..."
-            
-            // Hide info
-            document.getElementById("select-video").classList.add("hidden");
-            requestAnimationFrame(this.animate.bind(this));
-
-        } );
+                inputVideo.play();
+                console.log(inputVideo.videoWidth)
+                console.log(inputVideo.videoHeight);
+                
+                const aspect = inputVideo.videoWidth / inputVideo.videoHeight;
+                
+                const height = inputVideo.parentElement.clientHeight;
+                const width = height * aspect;
+                if( !this.mediapipe.loaded ) {
+                    await this.mediapipe.init();
+                    this.handLandmarker = this.mediapipe.handDetector;
+                    this.poseLandmarker = this.mediapipe.poseDetector;
+                }
+                // await this.initMediapipe();
+                if( !this.visualizer.scene ) {
+                    await this.visualizer.init(this.performs.scene, this.performs.currentCharacter, PoseLandmarker.POSE_CONNECTIONS, HandLandmarker.HAND_CONNECTIONS);
+                }
+                
+                this.mediapipeOnlineEnabler = true;
+                
+                this.video.classList.remove("hidden");
+                // const videoAspect =  this.video.clientHeight / this.video.videoHeight;
+                const offset = this.video.clientHeight/ this.video.videoHeight;
+                this.videoCanvas.height = this.video.clientHeight;
+                this.videoCanvas.width =  this.video.videoWidth*offset;
+                this.videoCanvas.classList.remove("hidden");
+                
+                $('#loading').fadeOut();
+                $('#text')[0].innerText = "Loading character...";
+                
+                // Hide info
+                document.getElementById("select-video").classList.add("hidden");
+                resolve(true);
+            } );
+        })
             
     }
 
@@ -1018,6 +1105,32 @@ class App {
             
                 this.drawingVideoUtils.drawConnectors( landmarks, HandLandmarker.HAND_CONNECTIONS, {color: '#1a2025', lineWidth: 4}); //'#00FF00'
                 this.drawingVideoUtils.drawLandmarks( landmarks, {color: this.referenceColor , fillColor: this.referenceColor, lineWidth: 2}); //'#00FF00'
+            }
+        }
+    }
+
+    draw2DLandmarksWebcam(handLandmarks, poseLandmarks) {
+        const canvasCtx = this.videoCanvas.getContext('2d');
+        canvasCtx.clearRect(0, 0, this.videoCanvas.width, this.videoCanvas.height);
+        if( this.show2DLandmarksVideo ) {
+            // const offset = this.video.clientHeight/ this.video.videoHeight;
+            // this.videoCanvas.height = this.video.clientHeight;
+            // this.videoCanvas.width =  this.video.videoWidth*offset;
+            //const landmarks = this.originalLandmarks[0].landmarks;
+            for(let i = 0; i < handLandmarks.length; i++) {
+                if(handLandmarks[i].length) {
+            
+                    this.drawingVideoUtils.drawConnectors( handLandmarks[i], HandLandmarker.HAND_CONNECTIONS, {color: '#1a2025', lineWidth: 4}); //'#00FF00'
+                    this.drawingVideoUtils.drawLandmarks( handLandmarks[i], {color: this.referenceColor , fillColor: this.referenceColor, lineWidth: 2}); //'#00FF00'
+                }
+            }
+            
+            for(let i = 0; i < poseLandmarks.length; i++) {
+                if(poseLandmarks[i].length) {
+            
+                    this.drawingVideoUtils.drawConnectors( poseLandmarks[i], PoseLandmarker.POSE_CONNECTIONS, {color: '#1a2025', lineWidth: 4}); //'#00FF00'
+                    this.drawingVideoUtils.drawLandmarks( poseLandmarks[i], {color: this.referenceColor , fillColor: this.referenceColor, lineWidth: 2}); //'#00FF00'
+                }
             }
         }
     }
@@ -1143,63 +1256,20 @@ class App {
 
             // this.trajectoriesHelper.updateTrajectories( this.window.start, this.window.end );
         }
-<<<<<<< Updated upstream
-        else if( this.handLandmarker && this.poseLandmarker && this.mode == App.modes.CAMERA ) {
-=======
         else if( this.mediapipe && this.handLandmarker && this.poseLandmarker ) {
->>>>>>> Stashed changes
             // Convert 3D canvas ( three scene ) into image to send it to Mediapipe
-            const bitmap = await createImageBitmap(this.video);
+            //const bitmap = await createImageBitmap(this.video);
             await this.mediapipe.processFrame(this.video);
-            console.log(this.mediapipe.currentResults)
+            // console.log(this.mediapipe.currentResults)
             // const detectionsHands = this.handLandmarker.detect(bitmap);
             // const detectionsPose = this.poseLandmarker.detect(bitmap);
-            bitmap.close();
-            const detections = {
+            //bitmap.close();
+            let detections = {
                 body:{l:[], w:[]},
                 leftHand:{l:[], w:[]},
                 rightHand:{l:[], w:[]},
                 retargetLandmarks: false,
             }
-<<<<<<< Updated upstream
-            if( detectionsPose.worldLandmarks.length && detectionsPose.worldLandmarks[0]) {
-                let land = detectionsPose.worldLandmarks[0];
-                if(this.prevBodyLandmarks.length == 15) {
-                    this.prevBodyLandmarks = this.prevBodyLandmarks.slice(1);
-                }
-                this.prevBodyLandmarks.push(detectionsPose.worldLandmarks[0]);
-                if(this.prevBodyLandmarks.length ==15) {
-                    land = this.smoothMediapipeLandmarks(this.prevBodyLandmarks, 2000, 0.5);
-                    land = land[this.prevBodyLandmarks.length-1];
-                }
-                detections.body.l = detectionsPose.landmarks[0];
-                detections.body.w = land//detectionsPose.worldLandmarks[0];
-            }
-
-            if( detectionsHands.worldLandmarks.length ) {
-                let done = 0x03; // bit0 left, bit1 right
-                for ( let i = 0; i < detectionsHands.handednesses.length; ++i ){
-                    let h = detectionsHands.handednesses[i][0];
-                    let dst = detections.rightHand;
-                    if ( h.categoryName == 'Left' ){
-                        dst = detections.leftHand
-                        done &= 0xfe;
-                    }else{
-                        done &= 0xfd;
-                    }
-                    let land = detectionsHands.worldLandmarks[0];
-                    if(this.prevHandsLandmarks.length == 15) {
-                        this.prevHandsLandmarks = this.prevHandsLandmarks.slice(1);
-                    }
-                    this.prevHandsLandmarks.push(detectionsHands.worldLandmarks[0]);
-                    if(this.prevHandsLandmarks.length ==15) {
-                        land = this.smoothMediapipeLandmarks(this.prevHandsLandmarks, 4000, 0.05);
-                        land = land[this.prevHandsLandmarks.length-1];
-                    }
-                    dst.l = detectionsHands.landmarks[ i ]
-                    dst.w = detectionsHands.worldLandmarks[ i ]
-                }
-=======
             // this.draw2DLandmarksWebcam(detectionsHands.landmarks, detectionsPose.landmarks);
             this.draw2DLandmarksWebcam(this.handLandmarker.landmarks, this.poseLandmarker.landmarks);
             const results = this.mediapipe.currentResults;
@@ -1230,7 +1300,6 @@ class App {
             // }
             if( this.smoothLandmarks ) {
                 detections = this.visualizer.smoothDetections(detections, this.smoothFrameCount);
->>>>>>> Stashed changes
             }
             this.visualizer.processDetections(detections, PoseLandmarker.POSE_CONNECTIONS, HandLandmarker.HAND_CONNECTIONS);
             this.visualizer.animate();
