@@ -1,6 +1,7 @@
 import { Performs } from './js/performs/Performs.js'
 import { LX } from 'lexgui'
-// import 'lexgui/extensions/videoeditor.js';
+// import 'lexgui/extensions/VideoEditor.js';
+import 'lexgui/extensions/AssetView.js';
 
 import './js/lexgui/videoeditor.js'
 import * as THREE from 'three'
@@ -27,13 +28,12 @@ let runningMode = "IMAGE";
 
 
 const avatars = [
-
-    { id: "EvaLow", src: `${Performs.AVATARS_URL}Eva_Low/Eva_Low.glb`, config: `${Performs.AVATARS_URL}Eva_Low/Eva_Low.json`, preview: `${Performs.AVATARS_URL}Eva_Low/Eva_Low.png`, type: "object" },
-    { id: "Witch", src: `${Performs.AVATARS_URL}Eva_Witch/Eva_Witch.glb`, config: `${Performs.AVATARS_URL}Eva_Witch/Eva_Witch.json`, preview: `${Performs.AVATARS_URL}Eva_Witch/Eva_Witch.png`, type: "object" },
-    { id: "Kevin", src: `${Performs.AVATARS_URL}Kevin/Kevin.glb`, config: `${Performs.AVATARS_URL}Kevin/Kevin.json`, preview: `${Performs.AVATARS_URL}Kevin/Kevin.png`, type: "object" },
-    { id: "Ada", src: `${Performs.AVATARS_URL}Ada/Ada.glb`, config: `${Performs.AVATARS_URL}Ada/Ada.json`, preview: `${Performs.AVATARS_URL}Ada/Ada.png`, type: "object" },
-    { id: "Eva", src: `https://models.readyplayer.me/66e30a18eca8fb70dcadde68.glb`, config: `${Performs.AVATARS_URL}ReadyEva/ReadyEva_v3.json`, preview: `https://models.readyplayer.me/66e30a18eca8fb70dcadde68.png`, type: "object" },
-    { id: "Victor", src:`https://models.readyplayer.me/66e2fb40222bef18d117faa7.glb`, config: `${Performs.AVATARS_URL}ReadyVictor/ReadyVictor.json`, preview: `https://models.readyplayer.me/66e2fb40222bef18d117faa7.png`, type: "object" }
+    { id: "EvaLow", src: `${Performs.AVATARS_URL}Eva_Low/Eva_Low.glb`, config: `${Performs.AVATARS_URL}Eva_Low/Eva_Low.json`, type: "object", metadata: { preview: `${Performs.AVATARS_URL}Eva_Low/Eva_Low.png` } },
+    { id: "Witch", src: `${Performs.AVATARS_URL}Eva_Witch/Eva_Witch.glb`, config: `${Performs.AVATARS_URL}Eva_Witch/Eva_Witch.json`, type: "object", metadata: { preview: `${Performs.AVATARS_URL}Eva_Witch/Eva_Witch.png` } },
+    { id: "Kevin", src: `${Performs.AVATARS_URL}Kevin/Kevin.glb`, config: `${Performs.AVATARS_URL}Kevin/Kevin.json`, type: "object", metadata: { preview: `${Performs.AVATARS_URL}Kevin/Kevin.png` } },
+    { id: "Ada", src: `${Performs.AVATARS_URL}Ada/Ada.glb`, config: `${Performs.AVATARS_URL}Ada/Ada.json`, type: "object", metadata: { preview: `${Performs.AVATARS_URL}Ada/Ada.png` } },
+    { id: "Eva", src: `https://models.readyplayer.me/66e30a18eca8fb70dcadde68.glb`, config: `${Performs.AVATARS_URL}ReadyEva/ReadyEva_v3.json`, type: "object", metadata: { preview: `https://models.readyplayer.me/66e30a18eca8fb70dcadde68.png` } },
+    { id: "Victor", src:`https://models.readyplayer.me/66e2fb40222bef18d117faa7.glb`, config: `${Performs.AVATARS_URL}ReadyVictor/ReadyVictor.json`, type: "object", metadata: { preview: `https://models.readyplayer.me/66e2fb40222bef18d117faa7.png` } }
 ]
 
 class App {
@@ -166,7 +166,7 @@ class App {
         }
 
         
-        this.assetData = [  { id: "Characters", icon: "PersonStanding", type: "folder", children: avatars }, { id: "Videos", icon: "Film", type: "folder", children: this.animationsMap.data, closed: true }, {id: "Webcam", type: "", preview: "https://cdn3d.iconscout.com/3d/premium/thumb/webcam-3d-icon-png-download-9580716.png"}];
+        this.assetData = [  { id: "Characters", icon: "PersonStanding", type: "folder", children: avatars }, { id: "Videos", icon: "Film", type: "folder", children: this.animationsMap.data, closed: true }, {id: "Webcam", type: "", metadata: { preview: "https://cdn3d.iconscout.com/3d/premium/thumb/webcam-3d-icon-png-download-9580716.png" }}];
         // for(let name in this.animationsMap) {
         //    this.assetData.push( { id: name, type: "video", src: `https://catsl.eelvex.net/static/vid/teacher-${name}.mp4` }); //`https://catsl.eelvex.net/static/vid/teacher-${name}.mp4` //"teacher-video-Ψ.mp4"
         // }
@@ -323,37 +323,37 @@ class App {
             previewActions: [{name:"Load", callback: ( e ) => { this.loadAsset(e) }}]
         });
 
-        this.assetView.load( this.assetData, async ( e ) => {
-            switch( e.type ) {
-                case LX.AssetViewEvent.ASSET_SELECTED:
-                    if(e.item.id == "Webcam" && this.mode != App.modes.CAMERA) {
-                        if( this.trajectoriesHelper ) {
-                            this.trajectoriesHelper.hide();
-                        }
-                        await this.prepareWebcamRecording();
-                        this.mode = App.modes.CAMERA;
-                    }
-                    console.log("selected")
-                    break;
-                case LX.AssetViewEvent.ASSET_DELETED:
-                    break;
-                case LX.AssetViewEvent.ASSET_RENAMED:
-                    break;
-                case LX.AssetViewEvent.ASSET_CLONED:
-                    break;
-                case LX.AssetViewEvent.ASSET_DBLCLICKED:
-                    console.log("double clicked")
-                    if(e.item.id == "Webcam") {
-                        return;
-                    }
-                    this.loadAsset( e.item );
-                    break;
-                case LX.AssetViewEvent.ASSET_CHECKED:
-                    break;
-                case LX.AssetViewEvent.ENTER_FOLDER :
-                    break;
+        this.assetView.on( "select", async ( event ) => {
+            const item = event.items[ 0 ];
+            if( item.id == "Webcam" && this.mode != App.modes.CAMERA )
+            {
+                if( this.trajectoriesHelper )
+                {
+                    this.trajectoriesHelper.hide();
+                }
+                await this.prepareWebcamRecording();
+                this.mode = App.modes.CAMERA;
             }
+            console.log( "selected" );
         } );
+
+        this.assetView.on( "dblClick", ( event ) => {
+            const item = event.items[ 0 ];
+            console.log( "double clicked" );
+            if( item.id == "Webcam" ) return;
+            this.loadAsset( item );
+        } );
+
+        // Example cancellable event
+        // this.assetView.on( "beforeCreateFolder", ( event, resolve ) => {
+        //     // Your code
+        //     // ...
+        //     // If cannot create, nothing to do
+        //     // If procede to create folder, call:
+        //     resolve();
+        // } );
+
+        this.assetView.load( this.assetData );
         assetsArea.attach( this.assetView );
 
         // ------------------------------------------------- Reference sign area -------------------------------------------------
