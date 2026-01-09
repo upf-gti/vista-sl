@@ -570,7 +570,7 @@ class App {
                                     this.trajectoriesHelper.hide();
                                 }
                                 this.videoCanvas.classList.add("hidden");
-                                $('#loading').fadeTo(0.6,1);
+                                //$('#loading').fadeTo(0.6,1);
                                 $('#loading').fadeOut();
                             }} );
                         } ,1000)
@@ -612,11 +612,13 @@ class App {
                             }
                             this.trajectoriesHelper.computeTrajectories(animation);
                         }
+                        $('#loading').fadeOut();
                     })
                     this.buildAnimation = false;
                 }
                 else {
                     this.buildAnimation = true;
+                    $('#loading').fadeOut();
                 }
             }
             catch( err ) {
