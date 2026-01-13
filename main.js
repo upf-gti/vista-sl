@@ -1,4 +1,4 @@
-import { Performs } from './js/performs/Performs.js'
+import { PERFORMS } from './js/performs/performs.nogui.module.js'
 import { LX } from 'lexgui'
 // import 'lexgui/extensions/VideoEditor.js';
 import 'lexgui/extensions/AssetView.js';
@@ -8,7 +8,6 @@ import * as THREE from 'three'
 import { DrawingUtils, HandLandmarker, PoseLandmarker, FilesetResolver} from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.13';
 
 import { transformLandmarks, flipLandmarks, scoreLandmarks, scoreToColor } from './js/feedbackHelper.js'
-import { TrajectoriesHelper } from './js/trajectoriesHelper.js'
 import { Visualizer } from './js/visualizer.js';
 import Stats from 'https://cdnjs.cloudflare.com/ajax/libs/stats.js/r17/Stats.min.js'
 import { AnimationRetargeting, applyTPose } from './js/retargeting.js'
@@ -18,22 +17,22 @@ document.body.appendChild(stats.dom)
 let runningMode = "IMAGE";
 
 // const avatars = {
-//     "EvaLow": [Performs.AVATARS_URL+'Eva_Low/Eva_Low.glb', Performs.AVATARS_URL+'Eva_Low/Eva_Low.json', 0, Performs.AVATARS_URL+'Eva_Low/Eva_Low.png'],
-//     "Witch": [Performs.AVATARS_URL+'Eva_Witch/Eva_Witch.glb', Performs.AVATARS_URL+'Eva_Witch/Eva_Witch.json', 0, Performs.AVATARS_URL+'Eva_Witch/Eva_Witch.png'],
-//     "Kevin": [Performs.AVATARS_URL+'Kevin/Kevin.glb', Performs.AVATARS_URL+'Kevin/Kevin.json', 0, Performs.AVATARS_URL+'Kevin/Kevin.png'],
-//     "Ada": [Performs.AVATARS_URL+'Ada/Ada.glb', Performs.AVATARS_URL+'Ada/Ada.json',0, Performs.AVATARS_URL+'Ada/Ada.png'],
-//     "Eva": ['https://models.readyplayer.me/66e30a18eca8fb70dcadde68.glb', Performs.AVATARS_URL+'ReadyEva/ReadyEva_v3.json',0, 'https://models.readyplayer.me/66e30a18eca8fb70dcadde68.png?background=68,68,68'],
-//     "Victor": ['https://models.readyplayer.me/66e2fb40222bef18d117faa7.glb', Performs.AVATARS_URL+'ReadyVictor/ReadyVictor.json',0, 'https://models.readyplayer.me/66e2fb40222bef18d117faa7.png?background=68,68,68']
+//     "EvaLow": [PERFORMS.AVATARS_URL+'Eva_Low/Eva_Low.glb', PERFORMS.AVATARS_URL+'Eva_Low/Eva_Low.json', 0, PERFORMS.AVATARS_URL+'Eva_Low/Eva_Low.png'],
+//     "Witch": [PERFORMS.AVATARS_URL+'Eva_Witch/Eva_Witch.glb', PERFORMS.AVATARS_URL+'Eva_Witch/Eva_Witch.json', 0, PERFORMS.AVATARS_URL+'Eva_Witch/Eva_Witch.png'],
+//     "Kevin": [PERFORMS.AVATARS_URL+'Kevin/Kevin.glb', PERFORMS.AVATARS_URL+'Kevin/Kevin.json', 0, PERFORMS.AVATARS_URL+'Kevin/Kevin.png'],
+//     "Ada": [PERFORMS.AVATARS_URL+'Ada/Ada.glb', PERFORMS.AVATARS_URL+'Ada/Ada.json',0, PERFORMS.AVATARS_URL+'Ada/Ada.png'],
+//     "Eva": ['https://models.readyplayer.me/66e30a18eca8fb70dcadde68.glb', PERFORMS.AVATARS_URL+'ReadyEva/ReadyEva_v3.json',0, 'https://models.readyplayer.me/66e30a18eca8fb70dcadde68.png?background=68,68,68'],
+//     "Victor": ['https://models.readyplayer.me/66e2fb40222bef18d117faa7.glb', PERFORMS.AVATARS_URL+'ReadyVictor/ReadyVictor.json',0, 'https://models.readyplayer.me/66e2fb40222bef18d117faa7.png?background=68,68,68']
 // }
 
 
 const avatars = [
-    { id: "EvaLow", src: `${Performs.AVATARS_URL}Eva_Low/Eva_Low.glb`, config: `${Performs.AVATARS_URL}Eva_Low/Eva_Low.json`, type: "object", metadata: { preview: `${Performs.AVATARS_URL}Eva_Low/Eva_Low.png` } },
-    { id: "Witch", src: `${Performs.AVATARS_URL}Eva_Witch/Eva_Witch.glb`, config: `${Performs.AVATARS_URL}Eva_Witch/Eva_Witch.json`, type: "object", metadata: { preview: `${Performs.AVATARS_URL}Eva_Witch/Eva_Witch.png` } },
-    { id: "Kevin", src: `${Performs.AVATARS_URL}Kevin/Kevin.glb`, config: `${Performs.AVATARS_URL}Kevin/Kevin.json`, type: "object", metadata: { preview: `${Performs.AVATARS_URL}Kevin/Kevin.png` } },
-    { id: "Ada", src: `${Performs.AVATARS_URL}Ada/Ada.glb`, config: `${Performs.AVATARS_URL}Ada/Ada.json`, type: "object", metadata: { preview: `${Performs.AVATARS_URL}Ada/Ada.png` } },
-    { id: "Eva", src: `https://models.readyplayer.me/66e30a18eca8fb70dcadde68.glb`, config: `${Performs.AVATARS_URL}ReadyEva/ReadyEva_v3.json`, type: "object", metadata: { preview: `https://models.readyplayer.me/66e30a18eca8fb70dcadde68.png` } },
-    { id: "Victor", src:`https://models.readyplayer.me/66e2fb40222bef18d117faa7.glb`, config: `${Performs.AVATARS_URL}ReadyVictor/ReadyVictor.json`, type: "object", metadata: { preview: `https://models.readyplayer.me/66e2fb40222bef18d117faa7.png` } }
+    { id: "EvaLow", src: `${PERFORMS.AVATARS_URL}Eva_Low/Eva_Low.glb`, config: `${PERFORMS.AVATARS_URL}Eva_Low/Eva_Low.json`, type: "object", metadata: { preview: `${PERFORMS.AVATARS_URL}Eva_Low/Eva_Low.png` } },
+    { id: "Witch", src: `${PERFORMS.AVATARS_URL}Eva_Witch/Eva_Witch.glb`, config: `${PERFORMS.AVATARS_URL}Eva_Witch/Eva_Witch.json`, type: "object", metadata: { preview: `${PERFORMS.AVATARS_URL}Eva_Witch/Eva_Witch.png` } },
+    { id: "Kevin", src: `${PERFORMS.AVATARS_URL}Kevin/Kevin.glb`, config: `${PERFORMS.AVATARS_URL}Kevin/Kevin.json`, type: "object", metadata: { preview: `${PERFORMS.AVATARS_URL}Kevin/Kevin.png` } },
+    { id: "Ada", src: `${PERFORMS.AVATARS_URL}Ada/Ada.glb`, config: `${PERFORMS.AVATARS_URL}Ada/Ada.json`, type: "object", metadata: { preview: `${PERFORMS.AVATARS_URL}Ada/Ada.png` } },
+    { id: "Eva", src: `https://models.readyplayer.me/66e30a18eca8fb70dcadde68.glb`, config: `${PERFORMS.AVATARS_URL}ReadyEva/ReadyEva_v3.json`, type: "object", metadata: { preview: `https://models.readyplayer.me/66e30a18eca8fb70dcadde68.png` } },
+    { id: "Victor", src:`https://models.readyplayer.me/66e2fb40222bef18d117faa7.glb`, config: `${PERFORMS.AVATARS_URL}ReadyVictor/ReadyVictor.json`, type: "object", metadata: { preview: `https://models.readyplayer.me/66e2fb40222bef18d117faa7.png` } }
 ]
 
 class App {
@@ -87,9 +86,9 @@ class App {
         this.buildAnimation = true;
         
         // Init performs (character )
-        this.performs = new Performs();
+        this.performs = new PERFORMS.Performs();
         this.performs.init({srcReferencePose: 2, trgReferencePose: 2, color: "#0B0B0C", restrictView: false, onReady: () => { this.init() }});
-        this.performs.changeMode(Performs.Modes.KEYFRAME);
+        this.performs.changeMode(PERFORMS.Modes.KEYFRAME);
         this.performs.controls[this.performs.camera].target.set(-0.0018097140234495583, 1.2244433704429296, 0.003067399741162387);
 
         this.camera = this.performs.cameras[this.performs.camera].clone();
@@ -171,7 +170,8 @@ class App {
         //    this.assetData.push( { id: name, type: "video", src: `https://catsl.eelvex.net/static/vid/teacher-${name}.mp4` }); //`https://catsl.eelvex.net/static/vid/teacher-${name}.mp4` //"teacher-video-Ψ.mp4"
         // }
 
-        this.trajectoriesHelper = new TrajectoriesHelper(  this.performs.currentCharacter.model,  this.performs.currentCharacter.mixer );
+        this.trajectoriesHelper = this.performs.keyframeApp.trajectoriesHelper; // = new TrajectoriesHelper(  this.performs.currentCharacter.model,  this.performs.currentCharacter.mixer );
+        this.performs.keyframeApp.showTrajectories = true;
 
         await this.createGUI();
         this.createMediapipeScene();
@@ -542,26 +542,6 @@ class App {
                                 this.performs.keyframeApp.onChangeAnimation(signName, true);
                                 this.performs.keyframeApp.changePlayState(false);
     
-                                this.trajectoriesHelper.mixer = this.performs.keyframeApp.mixer;
-                                if( this.performs.keyframeApp.currentAnimation ) {
-                                    const animation = this.performs.keyframeApp.bindedAnimations[this.performs.keyframeApp.currentAnimation][this.performs.currentCharacter.model.name];
-                                    let boneName = null;
-                                    for(let i = 0; i < animation.mixerBodyAnimation.tracks.length; i++) {
-                                        const track = animation.mixerBodyAnimation.tracks[i]
-                                        const trackName = track.name;
-                                        for(let trajectory in this.trajectoriesHelper.trajectories) {
-                                            
-                                            if(trackName.includes(trajectory+".") || trackName.includes(trajectory.replace("4","EndSite")+".")) {
-                                                boneName = trackName.replace(".quaternion", "");
-                                                if(boneName) {
-                                                    this.trajectoriesHelper.trajectories[trajectory].name = boneName;
-                                                    break;
-                                                }
-                                            }
-                                        }
-                                    }
-                                    this.trajectoriesHelper.computeTrajectories(animation);
-                                }
                                 this.video.currentTime = 0;
                                 if( this.showTrajectories ) {
                                     this.trajectoriesHelper.show();
@@ -592,26 +572,6 @@ class App {
 
                         this.performs.keyframeApp.onChangeAnimation(animationName, true);
                         this.performs.keyframeApp.changePlayState(false);
-                        this.trajectoriesHelper.mixer = this.performs.keyframeApp.mixer;
-                        if( this.performs.keyframeApp.currentAnimation ) {
-                            const animation = this.performs.keyframeApp.bindedAnimations[this.performs.keyframeApp.currentAnimation][this.performs.currentCharacter.model.name];
-                            let boneName = null;
-                            for(let i = 0; i < animation.mixerBodyAnimation.tracks.length; i++) {
-                                const track = animation.mixerBodyAnimation.tracks[i]
-                                const trackName = track.name;
-                                for(let trajectory in this.trajectoriesHelper.trajectories) {
-                                    
-                                    if(trackName.includes(trajectory+".") || trackName.includes(trajectory.replace("4","EndSite")+".")) {
-                                        boneName = trackName.replace(".quaternion", "");
-                                        if(boneName) {
-                                            this.trajectoriesHelper.trajectories[trajectory].name = boneName;
-                                            break;
-                                        }
-                                    }
-                                }
-                            }
-                            this.trajectoriesHelper.computeTrajectories(animation);
-                        }
                         $('#loading').fadeOut();
                     })
                     this.buildAnimation = false;
@@ -628,31 +588,11 @@ class App {
         else {
             this.performs.loadAvatar( item.src, 0 , new THREE.Quaternion(), item.id, () => {
                 this.performs.changeAvatar( item.id );
-    
-                this.trajectoriesHelper.object = this.performs.currentCharacter.model;
                 const mixer = this.performs.currentCharacter.mixer;
                 mixer.setTime(this.video.currentTime);
                 if( this.performs.keyframeApp.currentAnimation ) {
-                    const animation = this.performs.keyframeApp.bindedAnimations[this.performs.keyframeApp.currentAnimation][this.performs.currentCharacter.model.name];
-                    let boneName = null;
-                    for(let i = 0; i < animation.mixerBodyAnimation.tracks.length; i++) {
-                        const track = animation.mixerBodyAnimation.tracks[i]
-                        const trackName = track.name;
-                        for(let trajectory in this.trajectoriesHelper.trajectories) {
-                            
-                            if(trackName.includes(trajectory+".") || trackName.includes(trajectory.replace("4","EndSite")+".")) {
-                                boneName = trackName.replace(".quaternion", "");
-                                if(boneName) {
-                                    this.trajectoriesHelper.trajectories[trajectory].name = boneName;
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                    const track = animation.mixerBodyAnimation.tracks[0];
-                    this.trajectoriesHelper.trajectoryEnd = track.times.length;
-                    this.trajectoriesHelper.mixer = mixer;
                     this.trajectoriesHelper.computeTrajectories(animation);
+                    this.trajectoriesHelper.updateTrajectories(this.window.start, this.window.end);
                 }
                 if(this.mode == App.modes.CAMERA) {
                     if(item.id != "Eva" || item.id != "EvaLow") {
@@ -1255,8 +1195,6 @@ class App {
 
                 this.mediapipeScene.renderer.render(this.mediapipeScene.scene, this.performs.cameras[this.performs.camera]);
             }
-
-            // this.trajectoriesHelper.updateTrajectories( this.window.start, this.window.end );
         }
         else if( this.mediapipe && this.handLandmarker && this.poseLandmarker ) {
             // Convert 3D canvas ( three scene ) into image to send it to Mediapipe
