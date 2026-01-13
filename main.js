@@ -223,19 +223,19 @@ class App {
                                 panel.addToggle("Video 2D landmarks", this.show2DLandmarksVideo, (v) => {
                                     this.show2DLandmarksVideo = v;
                                     this.draw2DLandmarksVideo();                       
-                                }, {});
+                                }, {label: ""});
                                 panel.addToggle("Avatar 2D landmarks", this.show2DLandmarksAvatar, async (v) => {
                                     if( !this.handLandmarker ) {
                                         await this.initMediapipe();
                                     }
                                     this.show2DLandmarksAvatar = v;                        
-                                }, {});
+                                }, {label:""});
                                 panel.addToggle("Avatar 3D landmarks", this.show3DLandmarks, async (v) => {
                                     if( !this.handLandmarker ) {
                                         await this.initMediapipe();
                                     }
                                     this.show3DLandmarks = v;
-                                }, {});
+                                }, {label:""});
                                 
                                 panel.addToggle("Show trajectories", this.showTrajectories, async (v) => {
                                     this.showTrajectories = v;
@@ -246,7 +246,7 @@ class App {
                                         this.trajectoriesHelper.hide();
                                     }
                                     refresh();
-                                }, {});
+                                }, {label:""});
 
                                 if( this.showTrajectories ) {
                                     panel.addButton(null, "Trajectories settings", () => this.showTrajectoriesDialog());
@@ -651,11 +651,11 @@ class App {
                     }
                     leftValue = v;
                     refreshLeft();
-                });
+                }, {label:""});
                 for(let trajectory in leftTrajectories) {
                     leftHand.addSeparator();
                     leftHand.sameLine(2);
-                    const t = leftHand.addToggle(`Show ${trajectory}`, trajectories[trajectory].visible, (v) => { trajectories[trajectory].visible = v; }, {nameWidth: "170px"})
+                    const t = leftHand.addToggle(`Show ${trajectory}`, trajectories[trajectory].visible, (v) => { trajectories[trajectory].visible = v; }, {nameWidth: "170px", label:""})
                     t.root.getElementsByTagName("input")[0].style.backgroundColor = trajectories[trajectory].color ? trajectories[trajectory].color.getHexString() : null;
                     leftHand.addNumber("Width", trajectories[trajectory].thickness, (v) => {
                         trajectories[trajectory].thickness = v;
@@ -676,11 +676,11 @@ class App {
                     }
                     rightValue = v;
                     refreshRight();
-                });
+                }, {label:""});
                 for(let trajectory in rightTrajectories) {
                     rightHand.addSeparator();
                     rightHand.sameLine(2);
-                    const t = rightHand.addToggle(`Show ${trajectory}`, trajectories[trajectory].visible, (v) => { trajectories[trajectory].visible = v;}, {nameWidth: "170px"})
+                    const t = rightHand.addToggle(`Show ${trajectory}`, trajectories[trajectory].visible, (v) => { trajectories[trajectory].visible = v;}, {nameWidth: "170px", label:""})
                     t.root.getElementsByTagName("input")[0].style.backgroundColor = trajectories[trajectory].color ? trajectories[trajectory].color.getHexString() : null;
 
                     rightHand.addNumber("Width", trajectories[trajectory].thickness, (v) => {
