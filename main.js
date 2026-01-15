@@ -498,6 +498,7 @@ class App {
 
             const signName = item.id;
             this.selectedVideo = signName;
+            
             await this.loadVideo( signName, item.src );
             $('#text')[0].innerText = "Loading video..."
             $('#loading').fadeIn();
@@ -509,55 +510,55 @@ class App {
                 this.performs.keyframeApp.mixer.uncacheAction(this.performs.keyframeApp.mixer._actions[0]);
                 this.performs.keyframeApp.mixer._actions = [];
             }
-            if( !item.animation ) {
-             
-                await this.mediapipe.init();
-                this.handLandmarker = this.mediapipe.handDetector;
-                this.poseLandmarker = this.mediapipe.poseDetector;
-                $('#text')[0].innerText = "Generating animation...";
-                $('#loading').fadeTo(0, 0.6);
-                this.videoEditor.onVideoLoaded = async () => {
-                    // await this.initMediapipe();
-                    if( this.buildAnimation ) {
-                        setTimeout(async () => {
-                            await this.mediapipe.processVideoOffline( this.video, {callback: async ( ) => {
-                                const landmarks = this.mediapipe.landmarks;
-                                const blendshapes = this.mediapipe.blendshapes;
-                                const rawData = this.mediapipe.rawData;
-                                if( !this.visualizer.scene ) {
-                                    await this.visualizer.init(this.performs.scene, this.performs.currentCharacter, PoseLandmarker.POSE_CONNECTIONS, HandLandmarker.HAND_CONNECTIONS);
-                                }
-                                
-                                const animation = this.visualizer.createBodyAnimationFromWorldLandmarks( landmarks, this.performs.currentCharacter.skeleton )
-                                // const animationData = this.visualizer.retargeting.retargetAnimation( animation );
-                                this.performs.keyframeApp.loadedAnimations[signName] = {
-                                    name: signName,
-                                    bodyAnimation: animation ?? new THREE.AnimationClip( "bodyAnimation", -1, [] ),
-                                    skeleton: this.performs.currentCharacter.skeleton,
-                                    model: this.performs.currentCharacter.model,
-                                    type: "glb"
-                                };
-                                
-                                // this.performs.keyframeApp.bindAnimationToCharacter( signName, this.performs.currentCharacter.model.name);
-                                this.performs.keyframeApp.onChangeAnimation(signName, true);
-                                this.performs.keyframeApp.changePlayState(false);
-    
-                                this.video.currentTime = 0;
-                                if( this.showTrajectories ) {
-                                    this.trajectoriesHelper.show();
-                                }
-                                else {
-                                    this.trajectoriesHelper.hide();
-                                }
-                                this.videoCanvas.classList.add("hidden");
-                                //$('#loading').fadeTo(0.6,1);
-                                $('#loading').fadeOut();
-                            }} );
-                        } ,1000)
-                    }
-                    
-                    // this.mediapipeOnlineEnabler = true;
+            this.videoEditor.onVideoLoaded = async () => {
+                // await this.initMediapipe();
+                if( this.buildAnimation ) {
+                    $('#text')[0].innerText = "Generating animation...";
+                    $('#loading').fadeTo(0, 0.6);
+                    await this.mediapipe.init();
+                    this.handLandmarker = this.mediapipe.handDetector;
+                    this.poseLandmarker = this.mediapipe.poseDetector;
+                    setTimeout(async () => {
+                        await this.mediapipe.processVideoOffline( this.video, {callback: async ( ) => {
+                            const landmarks = this.mediapipe.landmarks;
+                            const blendshapes = this.mediapipe.blendshapes;
+                            const rawData = this.mediapipe.rawData;
+                            if( !this.visualizer.scene ) {
+                                await this.visualizer.init(this.performs.scene, this.performs.currentCharacter, PoseLandmarker.POSE_CONNECTIONS, HandLandmarker.HAND_CONNECTIONS);
+                            }
+                            
+                            const animation = this.visualizer.createBodyAnimationFromWorldLandmarks( landmarks, this.performs.currentCharacter.skeleton )
+                            // const animationData = this.visualizer.retargeting.retargetAnimation( animation );
+                            this.performs.keyframeApp.loadedAnimations[signName] = {
+                                name: signName,
+                                bodyAnimation: animation ?? new THREE.AnimationClip( "bodyAnimation", -1, [] ),
+                                skeleton: this.performs.currentCharacter.skeleton,
+                                model: this.performs.currentCharacter.model,
+                                type: "glb"
+                            };
+                            
+                            // this.performs.keyframeApp.bindAnimationToCharacter( signName, this.performs.currentCharacter.model.name);
+                            this.performs.keyframeApp.onChangeAnimation(signName, true);
+                            this.performs.keyframeApp.changePlayState(false);
+
+                            this.video.currentTime = 0;
+                            if( this.showTrajectories ) {
+                                this.trajectoriesHelper.show();
+                            }
+                            else {
+                                this.trajectoriesHelper.hide();
+                            }
+                            this.videoCanvas.classList.add("hidden");
+                            //$('#loading').fadeTo(0.6,1);
+                            $('#loading').fadeOut();
+                        }} );
+                    } ,1000)
                 }
+                
+                // this.mediapipeOnlineEnabler = true;
+            }
+            if( !item.animation ) {
+                this.buildAnimation = true;
                 return;
             }
             try {
@@ -578,7 +579,6 @@ class App {
                 }
                 else {
                     this.buildAnimation = true;
-                    $('#loading').fadeOut();
                 }
             }
             catch( err ) {
@@ -591,6 +591,9 @@ class App {
                 const mixer = this.performs.currentCharacter.mixer;
                 mixer.setTime(this.video.currentTime);
                 if( this.performs.keyframeApp.currentAnimation ) {
+                    const animation = this.performs.keyframeApp.bindedAnimations[this.performs.keyframeApp.currentAnimation][this.performs.currentCharacter.model.name];
+                    this.trajectoriesHelper.object = this.performs.currentCharacter.model;
+                    this.trajectoriesHelper.mixeer = mixer;
                     this.trajectoriesHelper.computeTrajectories(animation);
                     this.trajectoriesHelper.updateTrajectories(this.window.start, this.window.end);
                 }
