@@ -513,7 +513,7 @@ class App {
             this.videoEditor.onVideoLoaded = async () => {
                 // await this.initMediapipe();
                 if( this.buildAnimation ) {
-
+                    this.trajectoriesHelper.hide();
                     $('#text')[0].innerText = "Generating animation...";
                     $('#loading').fadeTo(0, 0.6);
                     await this.mediapipe.init();
