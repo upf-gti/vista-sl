@@ -13,7 +13,7 @@ import Stats from 'https://cdnjs.cloudflare.com/ajax/libs/stats.js/r17/Stats.min
 import { AnimationRetargeting, applyTPose } from './js/retargeting.js'
 import { MediaPipe } from './js/mediapipe.js';
 const stats = Stats()
-document.body.appendChild(stats.dom)
+// document.body.appendChild(stats.dom)
 let runningMode = "IMAGE";
 
 // const avatars = {
