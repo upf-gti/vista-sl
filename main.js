@@ -171,7 +171,7 @@ class App {
         // }
 
         this.trajectoriesHelper = this.performs.keyframeApp.trajectoriesHelper; // = new TrajectoriesHelper(  this.performs.currentCharacter.model,  this.performs.currentCharacter.mixer );
-        this.performs.keyframeApp.showTrajectories = true;
+        this.performs.keyframeApp.showTrajectories = this.showTrajectories;
 
         await this.createGUI();
         this.createMediapipeScene();
@@ -513,6 +513,7 @@ class App {
             this.videoEditor.onVideoLoaded = async () => {
                 // await this.initMediapipe();
                 if( this.buildAnimation ) {
+
                     $('#text')[0].innerText = "Generating animation...";
                     $('#loading').fadeTo(0, 0.6);
                     await this.mediapipe.init();
@@ -559,6 +560,8 @@ class App {
             }
             if( !item.animation ) {
                 this.buildAnimation = true;
+                this.trajectoriesHelper.hide();
+
                 return;
             }
             try {
@@ -576,6 +579,8 @@ class App {
                         $('#loading').fadeOut();
                     })
                     this.buildAnimation = false;
+                    this.trajectoriesHelper.hide();
+
                 }
                 else {
                     this.buildAnimation = true;
@@ -708,7 +713,11 @@ class App {
         this.video.src = src ? src : `https://vistasl.eelvex.net/static/vid/teacher-${encodeURIComponent(signName)}.mp4`;// `https://catsl.eelvex.net/static/vid/teacher-${signName}.mp4`; // "teacher-video-Ψ.mp4";
         const canvasCtx = this.characterCanvas.getContext('2d');
         canvasCtx.clearRect(0, 0, this.characterCanvas.width, this.characterCanvas.height);
-
+        this.video.onerror = (e) => {
+            LX.toast( `<span class="flex flex-row items-center gap-1">${ LX.makeIcon( "X", { svgClass: "fg-error" } ).innerHTML }Error loading: ${this.video.src}</span>`, null, { position: "top-center" } );
+            $('#loading').fadeOut();
+            console.error(`Error loading: ${this.video.src}`);
+        }
         this.video.onloadedmetadata = async (e) => {
 
             this.video.currentTime = 0.0;
