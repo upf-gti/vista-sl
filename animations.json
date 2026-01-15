@@ -2,7 +2,7 @@
      "data": [
 
         {"id": "Alphabet", "type": "folder", "children": [
-            { "id":"video-Α", "src": "https://vistasl.eelvex.net/static/vid/teacher-video-%CE%91.mp4","animation": "https://signon-lfs.gti.upf.edu/files/evalls/animics/clips/teacher-video-A.bvhe", "type": "video" },
+            { "id":"video-Α", "src": "https://vistasl.eelvex.net/static/vid/teacher-video-%CE%91.mp4","animation": "https://signon-lfs.gti.upf.edu/files/evalls/animics/clips/teacher-video-A-Eva.bvhe", "type": "video" },
             { "id":"video-Β", "src": "https://vistasl.eelvex.net/static/vid/teacher-video-%CE%92.mp4","animation": "", "type": "video" },
             { "id":"video-Γ", "src": "https://vistasl.eelvex.net/static/vid/teacher-video-%CE%93.mp4","animation": "", "type": "video" },
             { "id":"video-Δ", "src": "https://vistasl.eelvex.net/static/vid/teacher-video-%CE%94.mp4","animation": "", "type": "video" },

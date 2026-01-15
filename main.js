@@ -591,7 +591,7 @@ class App {
             }
         }
         else {
-            this.performs.loadAvatar( item.src, 0 , new THREE.Quaternion(), item.id, () => {
+            this.performs.loadAvatar( item.src, item.config, new THREE.Quaternion(), item.id, () => {
                 this.performs.changeAvatar( item.id );
                 const mixer = this.performs.currentCharacter.mixer;
                 mixer.setTime(this.video.currentTime);
@@ -749,8 +749,8 @@ class App {
                         //         visibility: landmark.visibility
                         //     };
                         // });
-                        this.drawingVideoUtils.drawConnectors( landmarks, HandLandmarker.HAND_CONNECTIONS, {color: '#1a2025', lineWidth: 4}); //'#00FF00'
-                        this.drawingVideoUtils.drawLandmarks( landmarks, {color: this.referenceColor , fillColor: this.referenceColor, lineWidth: 2}); //'#00FF00'
+                        // this.drawingVideoUtils.drawConnectors( landmarks, HandLandmarker.HAND_CONNECTIONS, {color: '#1a2025', lineWidth: 4}); //'#00FF00'
+                        // this.drawingVideoUtils.drawLandmarks( landmarks, {color: this.referenceColor , fillColor: this.referenceColor, lineWidth: 2}); //'#00FF00'
 
                         for(let i = 0; i < landmarks.length; i++) {
                             let landmark3D = new THREE.Vector3(landmarks[i].x, landmarks[i].y, landmarks[i].z);
