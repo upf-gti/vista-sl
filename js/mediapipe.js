@@ -491,7 +491,9 @@ class MediaPipe {
         
         const listener = async () => {
             let cvp = this.currentVideoProcessing;
-
+            if( !cvp ) {
+                return;
+            }
             await this.processFrame(cvp.videoElement, this.cropRect);
  
             cvp.currentTime = cvp.currentTime + cvp.dt;
