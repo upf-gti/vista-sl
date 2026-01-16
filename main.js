@@ -538,7 +538,7 @@ class App {
                             this.visualizer.prevBodyLandmarks.length = 0;
                             this.visualizer.prevLeftHandLandmarks.length = 0;
                             this.visualizer.prevRightHandLandmarks.length = 0;
-
+                            let offsetDelta = 0;
                             for( let i = 1; i < landmarks.length; ++i ){
                                 const lmk = landmarks[i];
 
@@ -559,7 +559,13 @@ class App {
                                 }
 
                                 // Bug fix: some videos do not update currentTime properly. The frame processor sets a dt=0 to the landmark when it should be dt. (except i==0 ->dt=0)
-                                landmarks[i].dt = timePerFrame * 1000; // milisec
+                                // Video playing is also affected. Accumulate extra time instead of forcing all frames to have timePerframe
+                                if( lmk.dt < 0.00001 ){
+                                    offsetDelta = timePerFrame * 1000; // milisec
+                                }else{
+                                    landmarks[i].dt += offsetDelta;
+                                    offsetDelta = 0; 
+                                }
                             }
 
                             const animation = this.visualizer.createBodyAnimationFromWorldLandmarks( this.performs.currentCharacter.skeleton, landmarks );
