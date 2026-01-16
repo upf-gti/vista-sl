@@ -528,9 +528,37 @@ class App {
                             if( !this.visualizer.scene ) {
                                 await this.visualizer.init(this.performs.scene, this.performs.currentCharacter, PoseLandmarker.POSE_CONNECTIONS, HandLandmarker.HAND_CONNECTIONS);
                             }
-                           
-                            // Bug fix: some videos do not update currentTime properly. The frame processor sets a dt=0 to the landmark when it should be dt. (except i==0 ->dt=0)
+
+                            let toSmooth = {
+                                body:{l:[], w:[]},
+                                leftHand:{l:[], w:[]},
+                                rightHand:{l:[], w:[]},
+                                retargetLandmarks: false,
+                            }
+                            this.visualizer.prevBodyLandmarks.length = 0;
+                            this.visualizer.prevLeftHandLandmarks.length = 0;
+                            this.visualizer.prevRightHandLandmarks.length = 0;
+
                             for( let i = 1; i < landmarks.length; ++i ){
+                                const lmk = landmarks[i];
+
+                                if( this.smoothLandmarks ){
+                                    toSmooth.body.l = lmk.PLM || [];
+                                    toSmooth.body.w = lmk.PWLM || [];
+                                    toSmooth.leftHand.l = lmk.LLM || [];
+                                    toSmooth.leftHand.w = lmk.LWLM || [];
+                                    toSmooth.rightHand.l = lmk.RLM || [];
+                                    toSmooth.rightHand.w = lmk.RWLM || [];
+                                    this.visualizer.smoothDetections(toSmooth, this.smoothFrameCount);
+                                    lmk.PLM = toSmooth.body.l.length ? toSmooth.body.l : null;
+                                    lmk.PWLM = toSmooth.body.w.length ? toSmooth.body.w : null;
+                                    lmk.LLM = toSmooth.leftHand.l.length ? toSmooth.leftHand.l : null;
+                                    lmk.LWLM = toSmooth.leftHand.w.length ? toSmooth.leftHand.w : null;
+                                    lmk.RLM = toSmooth.rightHand.l.length ? toSmooth.rightHand.l : null;
+                                    lmk.RWLM = toSmooth.rightHand.w.length ? toSmooth.rightHand.w : null;
+                                }
+
+                                // Bug fix: some videos do not update currentTime properly. The frame processor sets a dt=0 to the landmark when it should be dt. (except i==0 ->dt=0)
                                 landmarks[i].dt = timePerFrame * 1000; // milisec
                             }
 
