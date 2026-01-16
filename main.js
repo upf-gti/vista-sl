@@ -177,6 +177,9 @@ class App {
         this.createMediapipeScene();
 
         this.mediapipe = new MediaPipe(this.videoCanvas);
+        await this.mediapipe.init();
+        this.handLandmarker = this.mediapipe.handDetector;
+        this.poseLandmarker = this.mediapipe.poseDetector;
 
         this.drawingVideoUtils = new DrawingUtils( this.videoCanvas.getContext("2d") );
         this.drawingCharacterUtils = new DrawingUtils( this.characterCanvas.getContext("2d") );
@@ -511,24 +514,27 @@ class App {
                 this.performs.keyframeApp.mixer._actions = [];
             }
             this.videoEditor.onVideoLoaded = async () => {
-                // await this.initMediapipe();
                 if( this.buildAnimation ) {
                     this.trajectoriesHelper.hide();
                     $('#text')[0].innerText = "Generating animation...";
                     $('#loading').fadeTo(0, 0.6);
-                    await this.mediapipe.init();
-                    this.handLandmarker = this.mediapipe.handDetector;
-                    this.poseLandmarker = this.mediapipe.poseDetector;
                     setTimeout(async () => {
-                        await this.mediapipe.processVideoOffline( this.video, {callback: async ( ) => {
+                        const timePerFrame = 0.04; // 25 fps
+                        await this.mediapipe.processVideoOffline( this.video, {dt: timePerFrame, callback: async ( ) => {
                             const landmarks = this.mediapipe.landmarks;
                             const blendshapes = this.mediapipe.blendshapes;
                             const rawData = this.mediapipe.rawData;
+
                             if( !this.visualizer.scene ) {
                                 await this.visualizer.init(this.performs.scene, this.performs.currentCharacter, PoseLandmarker.POSE_CONNECTIONS, HandLandmarker.HAND_CONNECTIONS);
                             }
-                            
-                            const animation = this.visualizer.createBodyAnimationFromWorldLandmarks( landmarks, this.performs.currentCharacter.skeleton )
+                           
+                            // Bug fix: some videos do not update currentTime properly. The frame processor sets a dt=0 to the landmark when it should be dt. (except i==0 ->dt=0)
+                            for( let i = 1; i < landmarks.length; ++i ){
+                                landmarks[i].dt = timePerFrame * 1000; // milisec
+                            }
+
+                            const animation = this.visualizer.createBodyAnimationFromWorldLandmarks( this.performs.currentCharacter.skeleton, landmarks );
                             // const animationData = this.visualizer.retargeting.retargetAnimation( animation );
                             this.performs.keyframeApp.loadedAnimations[signName] = {
                                 name: signName,
@@ -957,12 +963,6 @@ class App {
                 
                 const height = inputVideo.parentElement.clientHeight;
                 const width = height * aspect;
-                if( !this.mediapipe.loaded ) {
-                    await this.mediapipe.init();
-                    this.handLandmarker = this.mediapipe.handDetector;
-                    this.poseLandmarker = this.mediapipe.poseDetector;
-                }
-                // await this.initMediapipe();
                 if( !this.visualizer.scene ) {
                     await this.visualizer.init(this.performs.scene, this.performs.currentCharacter, PoseLandmarker.POSE_CONNECTIONS, HandLandmarker.HAND_CONNECTIONS);
                 }

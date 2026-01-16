@@ -446,6 +446,7 @@ class OneEuroFilter {
 class QuaternionOneEuroFilter {
     constructor(freq = 60, minCutoff = 1.0, beta = 0.001, dCutoff = 1.0) {
         this.qPrev = null;
+        this._qCurr = null;
         this.filters = [
             new OneEuroFilter(freq, minCutoff, beta, dCutoff), // x
             new OneEuroFilter(freq, minCutoff, beta, dCutoff), // y
@@ -457,6 +458,7 @@ class QuaternionOneEuroFilter {
     filter(q, dt = null) {
         if (!this.qPrev) {
             this.qPrev = q.clone();
+            this._qCurr = q.clone();
             return q.clone();
         }
 
@@ -466,7 +468,8 @@ class QuaternionOneEuroFilter {
         const z = this.filters[2].filter(q.z, dt);
         const w = this.filters[3].filter(q.w, dt);
 
-        const qFiltered = new THREE.Quaternion(x, y, z, w).normalize();
+        const qFiltered = this._qCurr;
+        qFiltered.set(x, y, z, w).normalize();
 
         // Opcional: slerp per suavitzar encara més respecte al frame anterior
         qFiltered.slerp(this.qPrev, 0.1);
