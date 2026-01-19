@@ -5,7 +5,7 @@ import 'lexgui/extensions/AssetView.js';
 
 import './js/lexgui/videoeditor.js'
 import * as THREE from 'three'
-import { DrawingUtils, HandLandmarker, PoseLandmarker, FilesetResolver} from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.13';
+import { DrawingUtils, HandLandmarker, PoseLandmarker, FaceLandmarker, FilesetResolver} from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.13';
 
 import { transformLandmarks, flipLandmarks, scoreLandmarks, scoreToColor } from './js/feedbackHelper.js'
 import { Visualizer } from './js/visualizer.js';
@@ -73,6 +73,7 @@ class App {
         // Mediapipe
         this.mediapipe = null;
         this.handLandmarker = null;
+        this.faceLandmarker = null;
         this.drawingVideoUtils = null;
         this.drawingCharacterUtils = null;
         
@@ -96,6 +97,8 @@ class App {
         this.smoothLandmarks = true;
         this.smoothFrameCount = 3;
         this.visualizer = new Visualizer( this.smoothFrameCount );
+
+        this.requestId = null;
 
         window.addEventListener( 'resize', this.onWindowResize.bind(this) );
 
@@ -518,7 +521,7 @@ class App {
                     await this.mediapipe.init(); // loads only if not loaded
                     this.handLandmarker = this.mediapipe.handDetector;
                     this.poseLandmarker = this.mediapipe.poseDetector;
-
+                    this.faceLandmarker = this.mediapipe.faceDetector;
                     setTimeout(async () => {
                         const timePerFrame = 0.04; // 25 fps
                         await this.mediapipe.processVideoOffline( this.video, {dt: timePerFrame, callback: async ( ) => {
@@ -632,7 +635,10 @@ class App {
             }
         }
         else {
-            this.performs.loadAvatar( item.src, item.config, new THREE.Quaternion(), item.id, () => {
+            $('#text')[0].innerText = "Loading character...";
+            $('#loading').fadeIn();
+
+            this.performs.loadAvatar( item.src, item.config, new THREE.Quaternion(), item.id, async () => {
                 this.performs.changeAvatar( item.id );
                 this.trajectoriesHelper = this.performs.keyframeApp.trajectoriesHelper;
                 const mixer = this.performs.currentCharacter.mixer;
@@ -640,20 +646,16 @@ class App {
                 if( this.performs.keyframeApp.currentAnimation ) {
                     const animation = this.performs.keyframeApp.bindedAnimations[this.performs.keyframeApp.currentAnimation][this.performs.currentCharacter.model.name];
                     this.trajectoriesHelper.object = this.performs.currentCharacter.model;
-                    this.trajectoriesHelper.mixeer = mixer;
+                    this.trajectoriesHelper.mixer = mixer;
                     this.trajectoriesHelper.computeTrajectories(animation);
                     this.trajectoriesHelper.updateTrajectories(this.window.start, this.window.end);
                 }
                 if(this.mode == App.modes.CAMERA) {
-                    if(item.id != "Eva" || item.id != "EvaLow") {
-                        const srcSkeleton = this.visualizer.skeleton = applyTPose(this.visualizer.skeleton).skeleton;
-                        const trgSkeleton = this.performs.currentCharacter.skeleton = applyTPose(this.performs.currentCharacter.skeleton).skeleton;
-                        this.retargeting = new AnimationRetargeting(srcSkeleton, trgSkeleton, {srcPoseMode: AnimationRetargeting.BindPoseModes.DEFAULT, trgPoseMode: AnimationRetargeting.BindPoseModes.CURRENT});
-                        //this.visualizer.loadAvatar( this.performs.currentCharacter )
-                    }
-                    else {
-                        this.retargeting = null;
-                    }
+                   
+                    const trgSkeleton = this.performs.currentCharacter.skeleton = applyTPose(this.performs.currentCharacter.skeleton).skeleton;
+                    const srcSkeleton = this.visualizer.skeleton = applyTPose(this.visualizer.skeleton).skeleton;
+                    this.visualizer.loadAvatar( this.performs.currentCharacter )
+                    $('#loading').fadeOut();
                 }
             
             
@@ -1003,6 +1005,7 @@ class App {
                     await this.mediapipe.init();
                     this.handLandmarker = this.mediapipe.handDetector;
                     this.poseLandmarker = this.mediapipe.poseDetector;
+                    this.faceLandmarker = this.mediapipe.faceDetector;
                 }
                 if( !this.visualizer.scene ) {
                     await this.visualizer.init(this.performs.scene, this.performs.currentCharacter, PoseLandmarker.POSE_CONNECTIONS, HandLandmarker.HAND_CONNECTIONS);
@@ -1272,25 +1275,9 @@ class App {
             detections.leftHand.w = results.landmarksResults.LWLM || [];
             detections.rightHand.l = results.landmarksResults.RLM || [];
             detections.rightHand.w = results.landmarksResults.RWLM || [];
-            // if( detectionsPose.worldLandmarks.length && detectionsPose.worldLandmarks[0]) {
-                
-            //     detections.body.l = detectionsPose.landmarks[0];
-            //     detections.body.w =detectionsPose.worldLandmarks[0];
-            // }
             
-            // if( detectionsHands.worldLandmarks.length ) {
-            //     for( let i = 0; i < detectionsHands.handednesses.length; ++i ){
-            //         let h = detectionsHands.handednesses[i][0];                    
-            //         if( h.categoryName == 'Left' ){                        
-            //             detections.leftHand.l = detectionsHands.landmarks[i];
-            //             detections.leftHand.w = detectionsHands.worldLandmarks[i];
-            //         }
-            //         else{
-            //             detections.rightHand.l = detectionsHands.landmarks[i];
-            //             detections.rightHand.w = detectionsHands.worldLandmarks[i];
-            //         }
-            //     }
-            // }
+            detections.face = results.blendshapesResults || {};
+           // animationData.blendshapes.push( this.ANIMICS.videoProcessor.mediapipe.processBlendshapes(mediapipeData[i].detectionsFace, time ) )
             if( this.smoothLandmarks ) {
                 detections = this.visualizer.smoothDetections(detections, this.smoothFrameCount);
             }
@@ -1303,7 +1290,7 @@ class App {
 
         stats.update()
 
-        requestAnimationFrame(this.animate.bind(this));
+        this.requestId = requestAnimationFrame(this.animate.bind(this));
     }
 }
 App.modes = {VIDEO:0, CAMERA:1};

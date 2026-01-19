@@ -73,6 +73,7 @@ class Visualizer {
         this.prevBodyLandmarks = [];
         this.prevLeftHandLandmarks = [];
         this.prevRightHandLandmarks = [];
+        this.prevFaceBlendshapes = [];
 
         this.rotationHistory = {};
         this.smoothFrameCount = frameCount || 10;
@@ -167,6 +168,8 @@ class Visualizer {
             this.skeletonHelper.visible = false;
             this.model = character.model;
             this.skeleton = character.skeleton;
+            this.morphTargets = character.morphTargets;
+            this.characterMap = character.config.faceController.blendshapeMap
             //Create animations
             this.mixer = new THREE.AnimationMixer(this.model);
             this.retargeting = new AnimationRetargeting( this.bvh.skeleton, this.skeleton, { trgUseCurrentPose: true, srcEmbedWorldTransforms: true } );
@@ -372,6 +375,9 @@ class Visualizer {
         for( let i = 0; i < (landmarks.length-1); ++i ){
             const boneSrc = skeleton.bones[ boneIdxs[ i ] ];
             const boneTrg = skeleton.bones[ boneIdxs[ i+1 ] ];
+            if( !boneSrc || !boneTrg) {
+                continue;
+            }
             const landmarkSrc = bodyLandmarks[ landmarks[i] ].position ?? bodyLandmarks[ landmarks[i] ] ;
             const landmarkTrg = bodyLandmarks[ landmarks[i+1] ].position ?? bodyLandmarks[ landmarks[i+1] ];
             boneSrc.updateWorldMatrix( true, false );
@@ -514,6 +520,9 @@ class Visualizer {
             for( let i = 0; i < 3; ++i){
                 const boneSrc = skeleton.bones[ bonePhalanges[ f + i-1 ] ];
                 const boneTrg = skeleton.bones[ bonePhalanges[ f + i ] ];
+                if( !boneSrc || !boneTrg) {
+                    continue;
+                }
                 const landmark = f + i;
                 if ( bindQuats ){
                     boneSrc.quaternion.copy( bindQuats[ bonePhalanges[ f+i-1 ] ] );
@@ -636,6 +645,9 @@ class Visualizer {
             // add lateral deviation for fingers, only on the base bone. Right now, fingers are all in the plane ( Normal x Forward )
             if( f > 4 ){
                 const boneSrc = skeleton.bones[ bonePhalanges[ f-1 ] ];
+                if( !boneSrc ) {
+                    continue;
+                }
                 boneSrc.updateMatrixWorld(true);
                 let q = new THREE.Quaternion();
                 boneSrc.matrixWorld.decompose(tempVec3_1, q, tempVec3_1);
@@ -859,6 +871,38 @@ class Visualizer {
         return finalFrames;
     }
 
+    /**
+     * 
+     * @param {array of Mediapipe landmarks} history each entry of the array is a frame containing an object with information about the mediapipe output { FLM, PLM, LLM, RLM, PWLM, LWLM, RWLM }
+     * @returns {array of Mediapipe landmarks} same heriarchy as history but smoothed
+     */
+    smoothMediapipeBlendshapes(history, lambda = this.lambda, p = this.p) {
+        if (!history.length ) return history;
+
+        // const names = [];
+        // Convert history to frames
+        const frames = history.map((frame) => {
+            delete frame.dt;
+            const names = Object.keys(frame);
+            // Apply Whittaker to each landmark
+            const filtered = whittakerAsymmetricSmoothing(Object.values(frame), lambda, p, false);
+            const data = {};
+            for(let i = 0; i < names.length; i++) {
+                data[names[i]] = filtered[i];
+            }
+            return data;
+        }
+        );
+        // const finalFrames = filtered.map((frame, i) => {
+        //     for(let i = 0; i < names[i].length; i++) {
+        //         const data = {};
+        //         data[names[i]] = frame;
+        //         return data;
+        //     }
+        // })
+        return frames.pop();
+    }
+
     smoothDetections( detections, framesCount = 15 ) {
         if( detections.body.w.length ) {
             let land = detections.body.w;
@@ -928,6 +972,18 @@ class Visualizer {
                 })
             }
             detections.rightHand.w = land;
+        }
+
+        if( detections.face ) {
+            let b = detections.face;
+            while( this.prevFaceBlendshapes.length >= framesCount ) {
+                this.prevFaceBlendshapes.shift();
+            }
+            this.prevFaceBlendshapes.push(detections.face);
+            // if( this.prevFaceBlendshapes.length == framesCount ) {
+            //     b = this.smoothMediapipeBlendshapes( this.prevFaceBlendshapes, 50, 0.25);
+            // }
+           detections.face = b;
         }
         return detections;
     }
@@ -1032,11 +1088,120 @@ class Visualizer {
             b = this.leftHandPoints[ HAND_CONNECTIONS[i].end ].position;
             this.leftHandLines[i].geometry.setFromPoints( [ a,b ] );
         }
+
+       
+        if ( detections.face ) {
+            let blends = {};
+            blends = detections.face;
+            if(blends["LeftEyeYaw"] == null) {
+                blends["LeftEyeYaw"] = (blends["EyeLookOutLeft"] - blends["EyeLookInLeft"]) * 0.5;
+                blends["RightEyeYaw"] = - (blends["EyeLookOutRight"] - blends["EyeLookInRight"]) * 0.5;
+                blends["LeftEyePitch"] = (blends["EyeLookDownLeft"] - blends["EyeLookUpLeft"]) * 0.5;
+                blends["RightEyePitch"] = (blends["EyeLookDownRight"] - blends["EyeLookUpRight"]) * 0.5;
+            }
+            
+            detections.face = blends;
+            const meshes = [];
+            for( let object in this.morphTargets ) {
+                const mesh = this.model.getObjectByName(object);
+                mesh.morphTargetInfluences.fill(0);
+                meshes.push(mesh);
+            }
+
+            const actionUnits = {};
+            for( let au in Visualizer.mediapipeMap ) {
+                let bs = Visualizer.mediapipeMap[au];
+                let morphTarget = this.characterMap[au];
+                if( !bs || !bs.length || !morphTarget || !morphTarget.length ){ continue;}
+    
+                for(let i = 0; i < bs.length; i++) {
+                    const bsName = bs[i][0];
+                    if(!actionUnits[au]) {
+                        actionUnits[au] = 0;
+                    }
+                    if(!blends[bsName]) {
+                        blends[bsName] = 0;
+                    }
+                    actionUnits[au]= blends[bsName] * bs[i][1];
+                    for( let m = 0; m < meshes.length; m++ ) {
+                        const mesh = meshes[m];
+                        for(let mt = 0; mt < morphTarget.length; mt++) {
+                            const idx = this.morphTargets[mesh.name][morphTarget[mt][0]];
+                            if( idx == null) {
+                                continue;
+                            }
+    
+                            mesh.morphTargetInfluences[idx]+= actionUnits[au] * morphTarget[mt][1];
+                        }
+                    }
+                }
+            }            
+        }
+
     }
+    
 }
 
 export {Visualizer}
 
+Visualizer.mediapipeMap = {
+        "Inner_Brow_Raiser": [["BrowInnerUp", 1.0]],
+        "Outer_Brow_Raiser_Left": [["BrowOuterUpLeft", 1.0]],
+        "Outer_Brow_Raiser_Right":  [["BrowOuterUpRight", 1.0]],
+        "Brow_Lowerer_Left": [["BrowDownLeft", 1.0]],
+        "Brow_Lowerer_Right": [["BrowDownRight", 1.0]],
+        "Nose_Wrinkler_Left": [["NoseSneerLeft", 1.0]],
+        "Nose_Wrinkler_Right": [["NoseSneerRight", 1.0]],
+        "Nostril_Dilator": [],
+        "Nostril_Compressor": [],
+        "Dimpler_Left": [["MouthDimpleLeft", 1.0]],
+        "Dimpler_Right": [["MouthDimpleRight", 1.0]],
+        "Upper_Lip_Raiser_Left": [["MouthUpperUpLeft", 1.0]],
+        "Upper_Lip_Raiser_Right": [["MouthUpperUpRight", 1.0]],
+        "Lip_Corner_Puller_Left": [["MouthSmileLeft", 1.0]],
+        "Lip_Corner_Puller_Right": [["MouthSmileRight", 1.0]],
+        "Lip_Corner_Depressor_Left": [["MouthFrownLeft", 1.0]],
+        "Lip_Corner_Depressor_Right": [["MouthFrownRight", 1.0]],
+        "Lower_Lip_Depressor_Left": [["MouthLowerDownLeft", 1.0]],
+        "Lower_Lip_Depressor_Right": [["MouthLowerDownRight", 1.0]],
+        "Lip_Puckerer_Left": [["MouthPucker", 0.5]],
+        "Lip_Puckerer_Right": [["MouthPucker", 0.5]],
+        "Lip_Stretcher_Left": [["MouthStretchLeft", 1.0]],
+        "Lip_Stretcher_Right": [["MouthStretchRight", 1.0]],
+        "Lip_Funneler": [["MouthFunnel", 1.0]],
+        "Lip_Pressor_Left": [["MouthPressLeft", 1.0]],
+        "Lip_Pressor_Right": [["MouthPressRight", 1.0]],
+        "Lips_Part": [],
+        "Lip_Suck_Upper": [["MouthRollUpper", 1.0]],
+        "Lip_Suck_Lower": [["MouthRollLower", 1.0]],
+        "Lip_Wipe": [["MouthShrugLower", 1.0]],
+        "Tongue_Up": [],
+        "Tongue_Show": [["TongueOut", 1.0]],
+        "Tongue_Bulge_Left": [],
+        "Tongue_Bulge_Right": [],
+        "Tongue_Wide": [],
+        "Mouth_Stretch": [["MouthStretchLeft", 0.5], ["MouthStretchRight", 0.5]],
+        "Jaw_Drop": [["JawOpen", 1.0]],
+        "Jaw_Thrust": [["JawForward", 1.0]],
+        "Jaw_Sideways_Left": [["JawLeft", 1.0]],
+        "Jaw_Sideways_Right": [["JawRight", 1.0]],
+        "Chin_Raiser": [["CheekSquintLeft", 0.5], ["CheekSquintRight", 0.5]],
+        "Cheek_Raiser_Left": [["CheekSquintLeft", 1.0]],
+        "Cheek_Raiser_Right": [["CheekSquintRight", 1.0]],
+        "Cheek_Blow_Left": [],
+        "Cheek_Blow_Right": [],
+        "Cheek_Suck_Left": [],
+        "Cheek_Suck_Right": [],
+        "Upper_Lid_Raiser_Left": [["EyeWideLeft", 1.0]],
+        "Upper_Lid_Raiser_Right": [["EyeWideRight", 1.0]],
+        "Squint_Left": [["EyeSquintLeft", 1.0]],
+        "Squint_Right": [["EyeSquintRight", 1.0]],
+        "Blink_Left": [["EyeBlinkLeft", 1.0]],
+        "Blink_Right": [["EyeBlinkRight", 1.0]],
+        "Wink_Left": [],
+        "Wink_Right": [],
+        "Neck_Tightener": []
+    }
 /**
  * Asymmetric Whittaker Smoothing
  * @param {Array<number>} y - Original data series

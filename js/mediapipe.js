@@ -35,7 +35,7 @@ class MediaPipe {
         const loadingPromises = [];
         const vision = await FilesetResolver.forVisionTasks( "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.13/wasm" );
         
-        if(!this.faceLandmarker) {
+        if(!this.faceDetector) {
             const p = FaceLandmarker.createFromOptions(
                 vision, 
                 {
@@ -49,9 +49,9 @@ class MediaPipe {
                     numFaces: 1
                 }
             ).then(
-                (faceLandmarker) =>{
-                    this.faceLandmarker = faceLandmarker;
-                    return this.faceLandmarker.detectForVideo(initImage, performance.now());
+                (faceDetector) =>{
+                    this.faceDetector = faceDetector;
+                    return this.faceDetector.detectForVideo(initImage, performance.now());
                 }
             );
             loadingPromises.push(p);
@@ -251,7 +251,7 @@ class MediaPipe {
         const time = performance.now()//Date.now();
 
         // it would probably be more optimal to use hollistic. But it does not return certain types of values 
-        const detectionsFace = this.faceLandmarker.detectForVideo(croppedImage, time);
+        const detectionsFace = this.faceDetector.detectForVideo(croppedImage, time);
         const detectionsPose = this.poseDetector.detectForVideo(croppedImage, time);
         const detectionsHands = this.handDetector.detectForVideo(croppedImage, time);
         // let holistic_results = this.holisticLandmarker.detectForVideo(videoElement,time);
