@@ -170,16 +170,13 @@ class App {
         //    this.assetData.push( { id: name, type: "video", src: `https://catsl.eelvex.net/static/vid/teacher-${name}.mp4` }); //`https://catsl.eelvex.net/static/vid/teacher-${name}.mp4` //"teacher-video-Ψ.mp4"
         // }
 
-        this.trajectoriesHelper = this.performs.keyframeApp.trajectoriesHelper; // = new TrajectoriesHelper(  this.performs.currentCharacter.model,  this.performs.currentCharacter.mixer );
+        this.trajectoriesHelper = this.performs.keyframeApp.trajectoriesHelper;
         this.performs.keyframeApp.showTrajectories = this.showTrajectories;
 
         await this.createGUI();
         this.createMediapipeScene();
 
         this.mediapipe = new MediaPipe(this.videoCanvas);
-        await this.mediapipe.init();
-        this.handLandmarker = this.mediapipe.handDetector;
-        this.poseLandmarker = this.mediapipe.poseDetector;
 
         this.drawingVideoUtils = new DrawingUtils( this.videoCanvas.getContext("2d") );
         this.drawingCharacterUtils = new DrawingUtils( this.characterCanvas.getContext("2d") );
@@ -518,6 +515,10 @@ class App {
                     this.trajectoriesHelper.hide();
                     $('#text')[0].innerText = "Generating animation...";
                     $('#loading').fadeTo(0, 0.6);
+                    await this.mediapipe.init(); // loads only if not loaded
+                    this.handLandmarker = this.mediapipe.handDetector;
+                    this.poseLandmarker = this.mediapipe.poseDetector;
+
                     setTimeout(async () => {
                         const timePerFrame = 0.04; // 25 fps
                         await this.mediapipe.processVideoOffline( this.video, {dt: timePerFrame, callback: async ( ) => {
@@ -633,6 +634,7 @@ class App {
         else {
             this.performs.loadAvatar( item.src, item.config, new THREE.Quaternion(), item.id, () => {
                 this.performs.changeAvatar( item.id );
+                this.trajectoriesHelper = this.performs.keyframeApp.trajectoriesHelper;
                 const mixer = this.performs.currentCharacter.mixer;
                 mixer.setTime(this.video.currentTime);
                 if( this.performs.keyframeApp.currentAnimation ) {
@@ -997,6 +999,11 @@ class App {
                 
                 const height = inputVideo.parentElement.clientHeight;
                 const width = height * aspect;
+                if( !this.mediapipe.loaded ) {
+                    await this.mediapipe.init();
+                    this.handLandmarker = this.mediapipe.handDetector;
+                    this.poseLandmarker = this.mediapipe.poseDetector;
+                }
                 if( !this.visualizer.scene ) {
                     await this.visualizer.init(this.performs.scene, this.performs.currentCharacter, PoseLandmarker.POSE_CONNECTIONS, HandLandmarker.HAND_CONNECTIONS);
                 }
