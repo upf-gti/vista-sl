@@ -191,7 +191,7 @@ class Visualizer {
             RWLM: this.rightHandPoints.length ? this.rightHandPoints : null,
             LWLM: this.leftHandPoints.length ? this.leftHandPoints : null,
         }, delta );
-
+        this.createFacePoseFromBlendshapes( this.faceBlendshapes );
     }
 
     changeVisibility() {
@@ -664,7 +664,7 @@ class Visualizer {
         const landmarksLeftHand = worldLandmarks.LWLM;
     
         this.computeSpine( skeleton, landmarksBody, null, deltaTime );
-        this.computeQuatHead( skeleton, landmarksBody, null, deltaTime );
+        //this.computeQuatHead( skeleton, landmarksBody, null, deltaTime );
     
         // right arm-hands
         this.computeQuatArm( skeleton, landmarksBody, false, deltaTime );
@@ -736,6 +736,53 @@ class Visualizer {
         }
     
         return new THREE.AnimationClip( "animation", -1, tracks );
+    }
+
+    createFacePoseFromBlendshapes( blends, deltaTime = 0) {
+        const meshes = [];
+        for( let object in this.morphTargets ) {
+            const mesh = this.model.getObjectByName(object);
+            mesh.morphTargetInfluences.fill(0);
+            meshes.push(mesh);
+        }
+        const boneHead = this.skeleton.bones[ 5 ]; // head
+        const actionUnits = {};
+        for( let au in Visualizer.mediapipeMap ) {
+            let bs = Visualizer.mediapipeMap[au];
+            let morphTarget = this.characterMap[au];
+            if( !bs || !bs.length || !morphTarget || !morphTarget.length ) { 
+                continue;
+            }
+
+            for(let i = 0; i < bs.length; i++) {
+                const bsName = bs[i][0];
+                if(!actionUnits[au]) {
+                    actionUnits[au] = 0;
+                }
+                if(!blends[bsName]) {
+                    blends[bsName] = 0;
+                }
+                actionUnits[au]= blends[bsName] * bs[i][1];
+                for( let m = 0; m < meshes.length; m++ ) {
+                    const mesh = meshes[m];
+                    for(let mt = 0; mt < morphTarget.length; mt++) {
+                        const idx = this.morphTargets[mesh.name][morphTarget[mt][0]];
+                        if( idx == null) {
+                            continue;
+                        }
+
+                        mesh.morphTargetInfluences[idx]+= actionUnits[au] * morphTarget[mt][1];
+                    }
+                }
+            }
+        }
+        if( blends["Head"] ) {
+            // boneHead.quaternion.copy( new THREE.Quaternion().setFromEuler( blends[au]) )
+            const q = new THREE.Quaternion().setFromEuler( blends["Head"]);
+            const pQ = boneHead.parent.quaternion.clone();
+            q.multiply( pQ.invert() ).normalize();
+            boneHead.quaternion.copy( q );
+        }
     }
 
     applyHandSmoothingWithAnchor(handHistory, shoulderHistory, smoothFn) {
@@ -1089,55 +1136,29 @@ class Visualizer {
             this.leftHandLines[i].geometry.setFromPoints( [ a,b ] );
         }
 
-       
+        const dt = detections.face.dt;
+       delete detections.face.dt;
         if ( detections.face ) {
             let blends = {};
             blends = detections.face;
             if(blends["LeftEyeYaw"] == null) {
-                blends["LeftEyeYaw"] = (blends["EyeLookOutLeft"] - blends["EyeLookInLeft"]) * 0.5;
-                blends["RightEyeYaw"] = - (blends["EyeLookOutRight"] - blends["EyeLookInRight"]) * 0.5;
-                blends["LeftEyePitch"] = (blends["EyeLookDownLeft"] - blends["EyeLookUpLeft"]) * 0.5;
-                blends["RightEyePitch"] = (blends["EyeLookDownRight"] - blends["EyeLookUpRight"]) * 0.5;
+                blends["LeftEyeYaw"] = (blends["EyeLookOutLeft"] - blends["EyeLookInLeft"]) * 0.5 || 0;
+                blends["RightEyeYaw"] = - (blends["EyeLookOutRight"] - blends["EyeLookInRight"]) * 0.5 || 0;
+                blends["LeftEyePitch"] = (blends["EyeLookDownLeft"] - blends["EyeLookUpLeft"]) * 0.5 || 0;
+                blends["RightEyePitch"] = (blends["EyeLookDownRight"] - blends["EyeLookUpRight"]) * 0.5 || 0;
             }
-            
-            detections.face = blends;
-            const meshes = [];
-            for( let object in this.morphTargets ) {
-                const mesh = this.model.getObjectByName(object);
-                mesh.morphTargetInfluences.fill(0);
-                meshes.push(mesh);
+            if(!blends["LeftEye"] && blends["LeftEyePitch"] != undefined && blends["LeftEyeYaw"] != undefined) {
+                blends["LeftEye"] = new THREE.Euler( blends["LeftEyePitch"], blends["LeftEyeYaw"], 0, 'XYZ' );
+            }
+            if(!blends["RightEye"] && blends["RightEyePitch"] != undefined && blends["RightEyeYaw"] != undefined) {
+                blends["RightEye"] = new THREE.Euler( blends["RightEyePitch"], blends["RightEyeYaw"], 0, 'XYZ' );
+            }
+            if(!blends["Head"] && blends["HeadPitch"] != undefined && blends["HeadYaw"] != undefined && blends["HeadRoll"] != undefined) {
+                blends["Head"] =  new THREE.Euler( 2*Math.PI - blends["HeadPitch"]-0.2, 2*Math.PI - blends["HeadYaw"], 2*Math.PI - blends["HeadRoll"] , 'XYZ' );
             }
 
-            const actionUnits = {};
-            for( let au in Visualizer.mediapipeMap ) {
-                let bs = Visualizer.mediapipeMap[au];
-                let morphTarget = this.characterMap[au];
-                if( !bs || !bs.length || !morphTarget || !morphTarget.length ){ continue;}
-    
-                for(let i = 0; i < bs.length; i++) {
-                    const bsName = bs[i][0];
-                    if(!actionUnits[au]) {
-                        actionUnits[au] = 0;
-                    }
-                    if(!blends[bsName]) {
-                        blends[bsName] = 0;
-                    }
-                    actionUnits[au]= blends[bsName] * bs[i][1];
-                    for( let m = 0; m < meshes.length; m++ ) {
-                        const mesh = meshes[m];
-                        for(let mt = 0; mt < morphTarget.length; mt++) {
-                            const idx = this.morphTargets[mesh.name][morphTarget[mt][0]];
-                            if( idx == null) {
-                                continue;
-                            }
-    
-                            mesh.morphTargetInfluences[idx]+= actionUnits[au] * morphTarget[mt][1];
-                        }
-                    }
-                }
-            }            
+            this.faceBlendshapes = detections.face = blends;          
         }
-
     }
     
 }

@@ -651,14 +651,12 @@ class App {
                     this.trajectoriesHelper.updateTrajectories(this.window.start, this.window.end);
                 }
                 if(this.mode == App.modes.CAMERA) {
-                   
+                    this.trajectoriesHelper.hide();
                     const trgSkeleton = this.performs.currentCharacter.skeleton = applyTPose(this.performs.currentCharacter.skeleton).skeleton;
                     const srcSkeleton = this.visualizer.skeleton = applyTPose(this.visualizer.skeleton).skeleton;
                     this.visualizer.loadAvatar( this.performs.currentCharacter )
                     $('#loading').fadeOut();
                 }
-            
-            
 
             $('#loading').fadeOut(); //hide();
         }, (err) => {
