@@ -32,7 +32,13 @@ const avatars = [
     { id: "Kevin", src: `${PERFORMS.AVATARS_URL}Kevin/Kevin.glb`, config: `${PERFORMS.AVATARS_URL}Kevin/Kevin.json`, type: "object", metadata: { preview: `${PERFORMS.AVATARS_URL}Kevin/Kevin.png` } },
     { id: "Ada", src: `${PERFORMS.AVATARS_URL}Ada/Ada.glb`, config: `${PERFORMS.AVATARS_URL}Ada/Ada.json`, type: "object", metadata: { preview: `${PERFORMS.AVATARS_URL}Ada/Ada.png` } },
     { id: "Eva", src: `https://models.readyplayer.me/66e30a18eca8fb70dcadde68.glb`, config: `${PERFORMS.AVATARS_URL}ReadyEva/ReadyEva_v3.json`, type: "object", metadata: { preview: `https://models.readyplayer.me/66e30a18eca8fb70dcadde68.png` } },
-    { id: "Victor", src:`https://models.readyplayer.me/66e2fb40222bef18d117faa7.glb`, config: `${PERFORMS.AVATARS_URL}ReadyVictor/ReadyVictor.json`, type: "object", metadata: { preview: `https://models.readyplayer.me/66e2fb40222bef18d117faa7.png` } }
+    { id: "Victor", src:`https://models.readyplayer.me/66e2fb40222bef18d117faa7.glb`, config: `${PERFORMS.AVATARS_URL}ReadyVictor/ReadyVictor.json`, type: "object", metadata: { preview: `https://models.readyplayer.me/66e2fb40222bef18d117faa7.png` } },
+    { id: "Sara", src: `${PERFORMS.AVATARS_URL}Sara/Sara.glb`, config: `${PERFORMS.AVATARS_URL}Sara/Sara.json`, type: "object", metadata: { preview: `${PERFORMS.AVATARS_URL}Sara/Sara.png`}},
+    { id: "Nia", src: `${PERFORMS.AVATARS_URL}Nia/Nia.glb`, config: `${PERFORMS.AVATARS_URL}Nia/Nia.json`, type: "object", metadata: { preview: `${PERFORMS.AVATARS_URL}Nia/Nia.png`}},
+    { id: "Joan", src: `${PERFORMS.AVATARS_URL}Joan/Joan.glb`, config: `${PERFORMS.AVATARS_URL}Joan/Joan.json`, type: "object", metadata: { preview: `${PERFORMS.AVATARS_URL}Joan/Joan.png`}},
+    { id: "David", src: `${PERFORMS.AVATARS_URL}David/David.glb`, config: `${PERFORMS.AVATARS_URL}David/David.json`, type: "object", metadata: { preview: `${PERFORMS.AVATARS_URL}David/David.png`}},
+    { id: "Alex", src: `${PERFORMS.AVATARS_URL}Alex/Alex.glb`, config: `${PERFORMS.AVATARS_URL}Alex/Alex.json`, type: "object", metadata: { preview: `${PERFORMS.AVATARS_URL}Alex/Alex.png`}},
+    { id: "Noa", src: `${PERFORMS.AVATARS_URL}Noa/Noa.glb`, config: `${PERFORMS.AVATARS_URL}Noa/Noa.json`, type: "object", metadata: { preview: `${PERFORMS.AVATARS_URL}Noa/Noa.png`}},
 ]
 
 class App {

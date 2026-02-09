@@ -28,14 +28,46 @@
             { "id":"video-Ω", "src": "https://vistasl.eelvex.net/static/vid/teacher-video-%CE%A9.mp4","animation": "https://signon-lfs.gti.upf.edu/files/evalls/animics/clips/GSL-Omega.bvhe", "type": "video" }
         ]},
         {"id": "Family", "type": "folder", "children": [
-            { "id": "video-Χωρίζω", "src": "https://catsl.eelvex.net/static/vid/teacher-video-Χωρίζω.mp4", "animation": "https://signon-lfs.gti.upf.edu/files/evalls/animics/clips/GSL-Divide.bvhe", "type": "video" }
+            { "id": "video-Χωρίζω", "src": "https://catsl.eelvex.net/static/vid/teacher-video-Χωρίζω.mp4", "animation": "https://signon-lfs.gti.upf.edu/files/evalls/animics/clips/GSL-Divide.bvhe", "type": "video" },
+            { "id": "video-Αγόρι", "src": "https://vistasl.eelvex.net/static/vid/teacher-video-%CE%91%CE%B3%CF%8C%CF%81%CE%B9.mp4", "animation": "", "type": "video" },
+            { "id": "video-Αδελφή", "src": "https://vistasl.eelvex.net/static/vid/teacher-video-%CE%91%CE%B4%CE%B5%CE%BB%CF%86%CE%AE.mp4", "animation": "", "type": "video" },
+            { "id": "video-Γιαγιά", "src": "https://vistasl.eelvex.net/static/vid/teacher-video-%CE%93%CE%B9%CE%B1%CE%B3%CE%B9%CE%AC.mp4", "animation": "", "type": "video" },
+            { "id": "video-Κορίτσι", "src": "https://vistasl.eelvex.net/static/vid/teacher-video-%CE%9A%CE%BF%CF%81%CE%AF%CF%84%CF%83%CE%B9.mp4", "animation": "", "type": "video" },
+            { "id": "video-Μητέρα", "src": "https://vistasl.eelvex.net/static/vid/teacher-video-%CE%9C%CE%B7%CF%84%CE%AD%CF%81%CE%B1.mp4", "animation": "", "type": "video" },
+            { "id": "video-Παππούς", "src": "https://vistasl.eelvex.net/static/vid/teacher-video-%CE%A0%CE%B1%CF%80%CF%80%CE%BF%CF%8D%CF%82.mp4", "animation": "", "type": "video" },
+            { "id": "video-Πατέρας", "src": "https://vistasl.eelvex.net/static/vid/teacher-video-%CE%A0%CE%B1%CF%84%CE%AD%CF%81%CE%B1%CF%82.mp4", "animation": "", "type": "video" }
             ]},
+        {"id": "Days of the week", "type": "folder", "children": [
+            { "id": "video-Δευτέρα", "src": "https://vistasl.eelvex.net/static/vid/teacher-video-%CE%94%CE%B5%CF%85%CF%84%CE%AD%CF%81%CE%B1.mp4", "animation": "", "type": "video" },
+            { "id": "video-Κυριακή", "src": "https://vistasl.eelvex.net/static/vid/teacher-video-%CE%9A%CF%85%CF%81%CE%B9%CE%B1%CE%BA%CE%AE.mp4", "animation": "", "type": "video" },
+            { "id": "video-Πέμπτη", "src": "https://vistasl.eelvex.net/static/vid/teacher-video-%CE%A0%CE%AD%CE%BC%CF%80%CF%84%CE%B7.mp4", "animation": "", "type": "video" },
+            { "id": "video-Παρασκευή", "src": "https://vistasl.eelvex.net/static/vid/teacher-video-%CE%A0%CE%B1%CF%81%CE%B1%CF%83%CE%BA%CE%B5%CF%85%CE%AE.mp4", "animation": "", "type": "video" },
+            { "id": "video-Σάββατο", "src": "https://vistasl.eelvex.net/static/vid/teacher-video-%CE%A3%CE%AC%CE%B2%CE%B2%CE%B1%CF%84%CE%BF.mp4", "animation": "", "type": "video" },
+            { "id": "video-Τετάρτη", "src": "https://vistasl.eelvex.net/static/vid/teacher-video-%CE%A4%CE%B5%CF%84%CE%AC%CF%81%CF%84%CE%B7.mp4", "animation": "", "type": "video" },
+            { "id": "video-Τρίτη", "src": "https://vistasl.eelvex.net/static/vid/teacher-video-%CE%A4%CF%81%CE%AF%CF%84%CE%B7.mp4", "animation": "", "type": "video" }
+
+        ]},
         {"id": "Numbers", "type": "folder", "children": [
-            { "id": "video-Χίλια", "src": "https://catsl.eelvex.net/static/vid/teacher-video-Χίλια.mp4", "animation": "https://signon-lfs.gti.upf.edu/files/evalls/animics/clips/GSL-Thousand.bvhe", "type": "video" }
+            { "id": "video-Ένα", "src": "https://vistasl.eelvex.net/static/vid/teacher-video-%CE%88%CE%BD%CE%B1.mp4", "animation": "", "type": "video" },
+            { "id": "video-Έξι", "src": "https://vistasl.eelvex.net/static/vid/teacher-video-%CE%88%CE%BE%CE%B9.mp4", "animation": "", "type": "video" },
+            { "id": "video-Δέκα", "src": "https://vistasl.eelvex.net/static/vid/teacher-video-%CE%94%CE%AD%CE%BA%CE%B1.mp4", "animation": "", "type": "video" },
+            { "id": "video-Δύο", "src": "https://vistasl.eelvex.net/static/vid/teacher-video-%CE%94%CF%8D%CE%BF.mp4", "animation": "", "type": "video" },
+            { "id": "video-Είκοσι", "src": "https://vistasl.eelvex.net/static/vid/teacher-video-%CE%95%CE%AF%CE%BA%CE%BF%CF%83%CE%B9.mp4", "animation": "", "type": "video" },
+            { "id": "video-Εννέα", "src": "https://vistasl.eelvex.net/static/vid/teacher-video-%CE%95%CE%BD%CE%BD%CE%AD%CE%B1.mp4", "animation": "", "type": "video" },
+            { "id": "video-Εφτά", "src": "https://vistasl.eelvex.net/static/vid/teacher-video-%CE%95%CF%86%CF%84%CE%AC.mp4", "animation": "", "type": "video" },
+            { "id": "video-Οκτώ", "src": "https://vistasl.eelvex.net/static/vid/teacher-video-%CE%9F%CE%BA%CF%84%CF%8E.mp4", "animation": "", "type": "video" },
+            { "id": "video-Πέντε", "src": "https://vistasl.eelvex.net/static/vid/teacher-video-%CE%A0%CE%AD%CE%BD%CF%84%CE%B5.mp4", "animation": "", "type": "video" },
+            { "id": "video-Τέσσερα", "src": "https://vistasl.eelvex.net/static/vid/teacher-video-%CE%A4%CE%AD%CF%83%CF%83%CE%B5%CF%81%CE%B1.mp4", "animation": "", "type": "video" },
+            { "id": "video-Τρία", "src": "https://vistasl.eelvex.net/static/vid/teacher-video-%CE%A4%CF%81%CE%AF%CE%B1.mp4", "animation": "", "type": "video" },
+            { "id": "video-Τρία", "src": "https://vistasl.eelvex.net/static/vid/teacher-video-%CE%A4%CF%81%CE%AF%CE%B1.mp4", "animation": "", "type": "video" },
+            { "id": "video-Χίλια", "src": "https://vistasl.eelvex.net/static/vid/teacher-video-%CE%A7%CE%AF%CE%BB%CE%B9%CE%B1.mp4", "animation": "https://signon-lfs.gti.upf.edu/files/evalls/animics/clips/GSL-Thousand.bvhe", "type": "video" }
             
         ]},
         {"id": "Seasons/time", "type": "folder", "children": [
-
+            { "id": "video-Άνοιξη", "src": "https://vistasl.eelvex.net/static/vid/teacher-video-%CE%86%CE%BD%CE%BF%CE%B9%CE%BE%CE%B7.mp4", "animation": "", "type": "video" },
+            { "id": "video-Καλοκαίρι", "src": "https://vistasl.eelvex.net/static/vid/teacher-video-%CE%9A%CE%B1%CE%BB%CE%BF%CE%BA%CE%B1%CE%AF%CF%81%CE%B9.mp4", "animation": "", "type": "video" },
+            { "id": "video-Φθινόπωρο", "src": "https://vistasl.eelvex.net/static/vid/teacher-video-%CE%A6%CE%B8%CE%B9%CE%BD%CF%8C%CF%80%CF%89%CF%81%CE%BF.mp4", "animation": "", "type": "video" },
+            { "id": "video-Χειμώνας", "src": "https://vistasl.eelvex.net/static/vid/teacher-video-%CE%A7%CE%B5%CE%B9%CE%BC%CF%8E%CE%BD%CE%B1%CF%82.mp4", "animation": "", "type": "video" }
         ]},
         {"id": "Time", "type": "folder", "children": [
 
