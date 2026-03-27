@@ -25,7 +25,7 @@ let runningMode = "IMAGE";
 //     "Victor": ['https://models.readyplayer.me/66e2fb40222bef18d117faa7.glb', PERFORMS.AVATARS_URL+'ReadyVictor/ReadyVictor.json',0, 'https://models.readyplayer.me/66e2fb40222bef18d117faa7.png?background=68,68,68']
 // }
 
-
+// PERFORMS.AVATARS_URL = " ../3Dcharacters/";
 const avatars = [
     { id: "EvaLow", src: `${PERFORMS.AVATARS_URL}Eva_Low/Eva_Low.glb`, config: `${PERFORMS.AVATARS_URL}Eva_Low/Eva_Low.json`, type: "object", metadata: { preview: `${PERFORMS.AVATARS_URL}Eva_Low/Eva_Low.png` } },
     { id: "Witch", src: `${PERFORMS.AVATARS_URL}Eva_Witch/Eva_Witch.glb`, config: `${PERFORMS.AVATARS_URL}Eva_Witch/Eva_Witch.json`, type: "object", metadata: { preview: `${PERFORMS.AVATARS_URL}Eva_Witch/Eva_Witch.png` } },
@@ -180,7 +180,7 @@ class App {
         // }
 
         this.trajectoriesHelper = this.performs.keyframeApp.trajectoriesHelper;
-        this.performs.keyframeApp.showTrajectories = this.showTrajectories;
+        this.performs.keyframeApp.trajectoriesActive = this.showTrajectories;
 
         await this.createGUI();
         this.createMediapipeScene();
@@ -191,6 +191,7 @@ class App {
         this.drawingCharacterUtils = new DrawingUtils( this.characterCanvas.getContext("2d") );
 
         this.delayedResize(this.characterCanvas.parentElement.clientWidth, this.characterCanvas.parentElement.clientHeight);
+        $('#loading').fadeOut();
         this.animate();
     }
 
@@ -279,7 +280,8 @@ class App {
                         colorDialog = new LX.Dialog( "Color settings", panel => {
     
                             panel.addColor("Background", this.backgroundColor, (v) => {
-                                this.backgroundColor = v;                        
+                                this.backgroundColor = v;
+                                this.performs.setBackPlaneColor(v);
                             }, {});
                             panel.addColor("Ground truth 2D landmarks", this.referenceColor, (v) => {
                                 this.referenceColor = v;                        
@@ -410,7 +412,9 @@ class App {
 
         this.videoEditor.onSetTime = (t) => {
             this.window.moveWindow( t );
-            this.trajectoriesHelper.updateTrajectories( this.window.start, this.window.end );
+            if( this.showTrajectories ) {
+                this.trajectoriesHelper.updateTrajectories( this.window.start, this.window.end );
+            }
         }
 
         this.videoEditor.onChangeSpeed = (v) => {
@@ -427,10 +431,14 @@ class App {
         this.videoEditor.timebar.onMouse = ( e ) => this.window.onMouse( e );
         this.videoEditor.timebar.onDraw = () => this.window.draw();
         this.window.onChangeStart = ( startTime ) => {
-            this.trajectoriesHelper.updateTrajectories( this.window.start, this.window.end );;
+            if( this.showTrajectories ) {
+                this.trajectoriesHelper.updateTrajectories( this.window.start, this.window.end );
+            }
         }
         this.window.onChangeEnd = ( endTime ) => {
-            this.trajectoriesHelper.updateTrajectories( this.window.start, this.window.end );;
+            if( this.showTrajectories ) {
+                this.trajectoriesHelper.updateTrajectories( this.window.start, this.window.end );
+            }
         }
         this.window.onHover = ( e ) => {
             const x = e.target.offsetLeft + e.offsetX;
@@ -580,9 +588,19 @@ class App {
 
                             const animation = this.visualizer.createBodyAnimationFromWorldLandmarks( this.performs.currentCharacter.skeleton, landmarks );
                             // const animationData = this.visualizer.retargeting.retargetAnimation( animation );
+                            const faceAnimation = this.visualizer.createFaceAnimationFromBlendshapes(this.performs.currentCharacter.morphTargets, blendshapes);
+                            const bodyTracks = faceAnimation.tracks.filter( t => t.constructor == THREE.QuaternionKeyframeTrack);
+                            for( let i = 0; i < bodyTracks.length; i++ ) {
+                                const headAnimTrack = animation.tracks.filter( t => t.name == bodyTracks[i].name);
+                                if(headAnimTrack.length) {
+                                    headAnimTrack[0].values = bodyTracks[i].values;
+                                    headAnimTrack[0].times = bodyTracks[i].times;
+                                }
+                            }
                             this.performs.keyframeApp.loadedAnimations[signName] = {
                                 name: signName,
                                 bodyAnimation: animation ?? new THREE.AnimationClip( "bodyAnimation", -1, [] ),
+                                faceAnimation: faceAnimation ?? new THREE.AnimationClip( "faceAnimation", -1, [] ),
                                 skeleton: this.performs.currentCharacter.skeleton,
                                 model: this.performs.currentCharacter.model,
                                 type: "glb"
@@ -660,9 +678,10 @@ class App {
                     this.trajectoriesHelper.hide();
                     const trgSkeleton = this.performs.currentCharacter.skeleton = applyTPose(this.performs.currentCharacter.skeleton).skeleton;
                     const srcSkeleton = this.visualizer.skeleton = applyTPose(this.visualizer.skeleton).skeleton;
-                    this.visualizer.loadAvatar( this.performs.currentCharacter )
+                    // this.visualizer.loadAvatar( this.performs.currentCharacter )
                     $('#loading').fadeOut();
                 }
+                this.visualizer.loadAvatar( this.performs.currentCharacter )
 
             $('#loading').fadeOut(); //hide();
         }, (err) => {

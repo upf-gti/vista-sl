@@ -378,13 +378,12 @@ class MediaPipe {
         }
 
         if ( faceData.facialTransformationMatrixes.length > 0 ) {
-            const transform = new THREE.Object3D();
-            transform.matrix.fromArray( faceData.facialTransformationMatrixes[ 0 ].data );
-            transform.matrix.decompose( transform.position, transform.quaternion, transform.scale );
+            const mat = new THREE.Matrix4().fromArray( faceData.facialTransformationMatrixes[ 0 ].data );
+            const rotation = new THREE.Euler().setFromRotationMatrix(mat);
 
-            blends["HeadYaw"] = - transform.rotation.y;
-            blends["HeadPitch"] = - transform.rotation.x;
-            blends["HeadRoll"] = - transform.rotation.z;
+            blends["HeadYaw"] = rotation.y;
+            blends["HeadPitch"] = rotation.x;
+            blends["HeadRoll"] = rotation.z;
         }
 
         blends.dt = dt;

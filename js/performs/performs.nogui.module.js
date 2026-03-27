@@ -9,6 +9,7 @@ import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { Line2 } from 'three/addons/lines/Line2.js';
+import pako from 'https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.esm.mjs';
 
 /**
  * Main namespace
@@ -32,16 +33,18 @@ class AnimationRecorder {
     constructor(numCameras, app) {
         this.isRecording = false;
         this.timeLimit = null;
+        this.clock = new THREE.Clock();
+        // for each camera:
         this.mediaRecorders = [];
         this.recordedChunks = [];
         this.renderers = [];
-        this.clock = new THREE.Clock();
+        
         this.handleDataAvailable = this.handleDataAvailable.bind(this);
         this.handleStop = this.handleStop.bind(this);
-        this.animationsCount = 0;
-        this.enabledCameras = 0;
+        
         this.exportZip = true;
 
+        this.mimeType = MediaRecorder.isTypeSupported('video/webm;') ? 'video/webm;' : 'video/mp4';
         for (let i = 0; i < numCameras; i++) {
             // offscreen renderer for each camera
             const offscreenRenderer = new THREE.WebGLRenderer( {antialias: true} );
@@ -51,23 +54,35 @@ class AnimationRecorder {
             offscreenRenderer.toneMappingExposure = 1;
             this.renderers.push(offscreenRenderer);
 
-            const stream = this.renderers[i].domElement.captureStream(60);
-            const options = { mimeType: 'video/webm;', videoBitsPerSecond: 5 * 1024 * 1024 }; // 5 Mbps
+            if (this.renderers[i].domElement.captureStream) {
+                const stream = this.renderers[i].domElement.captureStream(60);
+                const options = { mimeType: this.mimeType, videoBitsPerSecond: 5 * 1024 * 1024 }; // 5 Mbps
 
-            const mediaRecorder = new MediaRecorder(stream, options);
-            mediaRecorder.ondataavailable = (event) => this.handleDataAvailable(event, i);
-            mediaRecorder.onstop = () => this.handleStop(i);
-            mediaRecorder.onstart = () => this.handleStart(i);
+                const mediaRecorder = new MediaRecorder(stream, options);
+                mediaRecorder.ondataavailable = (event) => this.handleDataAvailable(event, i);
+                mediaRecorder.onstop = () => this.handleStop(i);
 
-            this.mediaRecorders.push( mediaRecorder );
-            this.recordedChunks.push([]);
+                this.mediaRecorders.push( mediaRecorder );
+                this.recordedChunks.push([]);
+            }
+            else {
+                console.error("Animation Recorder Error: CaptureSteam not supported.");
+            }
         }        this.app = app;
+        window.addEventListener('resize', this._onWindowResize.bind(this));
+    }
+
+    _onWindowResize() {
+        for (let i = 0; i < this.renderers.length; i++) {
+            this.renderers[i].setSize(window.innerWidth, window.innerHeight);
+        }
     }
 
     async manageMultipleCapture (keyframeApp) {
         this.keyframeApp = keyframeApp;
         let animations = [];
         
+        // fill with animations that need to be recorded
         for (let animationName in keyframeApp.loadedAnimations) {
             let animation = keyframeApp.loadedAnimations[animationName];
             if (!animation.record) {
@@ -75,11 +90,13 @@ class AnimationRecorder {
             }
             animations.push(animationName);
         }
-        this.animationsCount = animations.length;
+        this.remainingAnimations = animations.length;
 
+        // record each animation sequentially
         for (let i = 0; i < animations.length; i++) {
             const animationName = animations[i];
             let animation = keyframeApp.loadedAnimations[animationName];
+            // gui update with current animation name
             if(this.onStartCapture) {
                 this.onStartCapture('(' + (i+1) + '/' + animations.length+ ') ' + animationName);
             }
@@ -89,15 +106,11 @@ class AnimationRecorder {
 
     manageCapture (animationName, timeLimit = null) {
         if (this.app.mode == PERFORMS.Modes.SCRIPT){
-            this.animationsCount = 1;
             if(this.onStartCapture) {
                 this.onStartCapture('');
             }
             if (this.isRecording) { 
-                this.stopCapture(); 
-                // if(this.onStopCapture) {
-                //     this.onStopCapture();
-                // }
+                this.stopCapture();
             }
             else { this.startCapture("BML"); }
         }
@@ -120,23 +133,48 @@ class AnimationRecorder {
 
     startCapture (animationName) {
         this.isRecording = true;
-        this.enabledCameras = 0;
+        this.currentAnimationName = animationName; // Store the animation name
+
+        this.enabledRecorders = [];
+
         for( let i = 0; i < this.app.cameras.length; i++) {
-            if(!this.app.cameras[i].record) {
-                continue;
-            }
-            this.enabledCameras += 1;
+            if(!this.app.cameras[i].record) continue;
+
             this.recordedChunks[i] = [];
+            this.enabledRecorders.push(i);
             this.mediaRecorders[i].start();
         }
-        // this.recordedChunks.forEach((chunk, i, arr) => arr[i] = []); // reset chuncks
-        // this.mediaRecorders.forEach(recorder => { recorder.start() });
-        this.currentAnimationName = animationName; // Store the animation name
+        
+        // start animation
+        if (this.app.mode == PERFORMS.Modes.SCRIPT){
+            this.app.scriptApp.replay();
+        }
+        else if (this.app.mode == PERFORMS.Modes.KEYFRAME) {
+            this.app.keyframeApp.changePlayState(true); // start animation                
+        }
+    
+        this.clock.start();
+
+        // expected files to be downloaded - for current animation
+        this.pendingFiles = this.enabledRecorders.length;
     }
         
     stopCapture () {
         this.isRecording = false;
-        this.mediaRecorders.forEach(recorder => recorder.stop());   
+
+        this.enabledRecorders.forEach(idx => {
+            if (this.mediaRecorders[idx].state === 'recording') {
+                this.mediaRecorders[idx].stop();
+            }
+        });
+
+        if (this.onStopCapture){
+            this.onStopCapture();
+            // reset pose on final recording stop
+            if (this.app.mode == PERFORMS.Modes.SCRIPT){
+                this.app.scriptApp.ECAcontroller.reset(true);
+            }
+        }
     }
 
     handleDataAvailable (event, idx) {
@@ -145,84 +183,69 @@ class AnimationRecorder {
         }
     }
 
-    handleStart (idx) {
-        if (idx === 0) {
-            if (this.app.mode == PERFORMS.Modes.SCRIPT){
-                this.app.scriptApp.replay();
-            }
-            else if (this.app.mode == PERFORMS.Modes.KEYFRAME) {
-                this.app.keyframeApp.changePlayState(true); // start animation                
-            }
-        }
-        this.clock.start();
-    }
-
     handleStop (idx) {
+        if (!this.enabledRecorders.includes(idx)) {
+            return; // Skip if this recorder was not enabled for recording
+        }
+
         const animationName = this.currentAnimationName;
-        const blob = new Blob(this.recordedChunks[idx], {type: 'video/webm'});
-        const name =  `${animationName} ${idx + 1}.webm`;
+        const blob = new Blob(this.recordedChunks[idx], {type: this.mimeType});
+        const camNumber = idx + 1;
+        const name =  `${animationName} ${camNumber}.webm`;
 
-        blobToBase64(blob, (binaryData) => {
-            if(!zip && this.exportZip) {
-                console.error("JSZip not imported. The recordings can't be downloaded.");
-            }
+        if(!zip && this.exportZip) {
+            console.error("JSZip not imported. The recordings can't be downloaded.");
+        }
 
-            if(zip && this.exportZip) {
-                // Add downloaded file video to zip in the specified folder:
-                zip.folder(animationName).file(name, binaryData, {base64: true});
-                let files = Object.keys(zip.files);
-    
-                if((files.length - this.animationsCount) == this.animationsCount * this.enabledCameras) {
-                    if(this.onStopCapture) {
-                        this.onStopCapture();
-                    }
-                    // All files have been downloaded, create the zip and download it
-                    zip.generateAsync({type:"base64"}).then(function (base64) {
-                        let zipName = 'performs-recordings.zip';
-                        let a = document.createElement('a'); 
-                        // Then trigger the download link
-                        a.href = "data:application/zip;base64," + base64;
-                        a.download = zipName;
-                        a.click();
-                        zip.files = {};
-                    });
+        if(zip && this.exportZip) {
+            // Add downloaded file video to zip in the specified folder:
+            zip.folder(animationName).file(name, blob);
+        }
+        else {
+            let a = document.createElement('a'); 
+            // Then trigger the download link
+            a.href = URL.createObjectURL(blob);
+            a.download = name;
+            a.click();
+        }
+
+        this.pendingFiles--;
+
+        // if all files for current animation are ready, resolve promise to start next animation
+        if (this.pendingFiles === 0) {
+            
+            if (this.onCaptureComplete) {
+                this.onCaptureComplete();
+                this.onCaptureComplete = null; // reset callback for next animation
+
+                // refresh gui
+                if (this.app.mode == PERFORMS.Modes.SCRIPT) {
+                    // reset avatar pose / stop animation
+                    this.app.scriptApp.ECAcontroller.reset(true);
                 }
             }
-            else {
-                let a = document.createElement('a'); 
-                // Then trigger the download link
-                a.href = "data:application/webm;base64," + binaryData;
-                a.download = name;
-                a.click();
-
-                if(this.isRecording == false) {
-                    if(this.onStopCapture) {
-                        this.onStopCapture();
-                    }
-                }
-            }
-            //this.recordedChunks[idx] = [];
-        });
-
-        // refresh gui
-        if (idx === 0) {
-            if (this.app.mode == PERFORMS.Modes.SCRIPT) {
-                // reset avatar pose / stop animation
-                this.app.scriptApp.ECAcontroller.reset(true);
+            
+            // zip after ALL animations are recorded
+            this.remainingAnimations--;
+            if (this.remainingAnimations === 0 && zip && this.exportZip) {
+                this.downloadZip();
             }
         }
 
         // reset clock to 0
-        this.clock.elapsedTime = 0;
         this.clock.stop();
+        this.clock.elapsedTime = 0;
+    }
 
-        // Check if all recorders have stopped
-        if (this.mediaRecorders.every(recorder => recorder.state === 'inactive')) {
-            if (this.onCaptureComplete) {
-                this.onCaptureComplete(); // Resolve the promise to indicate that capture is complete
-                this.onCaptureComplete = null; // Clear the reference
-            }
-        }
+    async downloadZip() {
+        const blob = await zip.generateAsync({type: 'blob'});
+
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'recordings.zip';
+        a.click();
+
+        zip = new JSZip(); // reset zip for next recordings
     }
 
     update (scene, cameras) {
@@ -232,20 +255,12 @@ class AnimationRecorder {
         }
 
         if (this.timeLimit && this.clock.getElapsedTime() > this.timeLimit ) {
-            this.app.keyframeApp.changePlayState(false);  // stop animation
+            if(this.app.mode == PERFORMS.Modes.KEYFRAME) {
+                this.app.keyframeApp.changePlayState(false);  // stop animation
+            }
             this.stopCapture();
         }
     }
-}
-
-function blobToBase64(blob, callback) {
-    var reader = new FileReader();
-    reader.onload = function() {
-        var dataUrl = reader.result;
-        var base64 = dataUrl.split(',')[1];
-        callback(base64);
-    };
-    reader.readAsDataURL(blob);
 }
 
 // This is a generated file. Do not edit. 
@@ -2924,7 +2939,7 @@ class Lipsync {
     
         // Audio context
         if (!Lipsync.AContext)
-            Lipsync.AContext = new AudioContext();
+            Lipsync.AContext = new text();
         // Restart
         this.stopSample();
     
@@ -3072,9 +3087,14 @@ class Lipsync {
     init() {
     
         // Audio context
-        if (!Lipsync.AContext)
-            Lipsync.AContext = new AudioContext();
-        var context = this.context = Lipsync.AContext;
+        if ( !Lipsync.AContext ) {
+            if( !window.AudioContext ) {
+                return;
+            }
+            Lipsync.AContext = new AudioContext(); 
+        }
+        
+        const context = this.context = Lipsync.AContext;
         // Sound source
         this.sample = context.createBufferSource();
         // Gain Node
@@ -10451,6 +10471,9 @@ BVHLoader.prototype.parseExtended = function(text) {
 	};		
 };
 
+//import { normalize } from 'three/src/math/MathUtils.js';
+
+
 // asymetric and/or negative scaling of objects is not properly supported 
 class AnimationRetargeting {
 
@@ -10461,41 +10484,18 @@ class AnimationRetargeting {
     */
     static BindPoseModes = { DEFAULT : 0, CURRENT: 1}
     static boneMap = {
+        "Hips":			  "hips",
+        "BelowStomach":   "spine",
+        "Stomach":  	  "spine1",
+        "ShouldersUnion": "spine2", // chest
+        "Neck":           "neck",
+        "Head":           "head",
         "LEye":           "lefteye",
         "REye":           "righteye",
-        "Head":           "head",
-        "Neck":           "neck",
-        "ShouldersUnion": "spine2", // chest
-        "Stomach":  	  "spine1",
-        "BelowStomach":   "spine",
-        "Hips":			  "hips",
-        "RShoulder":      "rightshoulder",
-        "RArm":           "rightarm",
-        "RElbow":         "rightforearm",
-        "RHandThumb":     "righthandthumb1",
-        "RHandThumb2":    "righthandthumb2",
-        "RHandThumb3":    "righthandthumb3",
-        "RHandThumb4":    "righthandthumb4",
-        "RHandIndex":     "righthandindex1",
-        "RHandIndex2":    "righthandindex2",
-        "RHandIndex3":    "righthandindex3",
-        "RHandIndex4":    "righthandindex4",
-        "RHandMiddle":    "righthandmiddle1",
-        "RHandMiddle2":   "righthandmiddle2",
-        "RHandMiddle3":   "righthandmiddle3",
-        "RHandMiddle4":   "righthandmiddle4",
-        "RHandRing":      "righthandring1",
-        "RHandRing2":     "righthandring2",
-        "RHandRing3":     "righthandring3",
-        "RHandRing4":     "righthandring4",
-        "RHandPinky":     "righthandpinky1",
-        "RHandPinky2":    "righthandpinky2",
-        "RHandPinky3":    "righthandpinky3",
-        "RHandPinky4":    "righthandpinky4",
-        "RWrist":         "righthand",
         "LShoulder":      "leftshoulder",
         "LArm":           "leftarm",
         "LElbow":         "leftforearm",
+        "LWrist":         "lefthand",
         "LHandThumb":     "lefthandthumb1",
         "LHandThumb2":    "lefthandthumb2",
         "LHandThumb3":    "lefthandthumb3",
@@ -10516,7 +10516,30 @@ class AnimationRetargeting {
         "LHandPinky2":    "lefthandpinky2",
         "LHandPinky3":    "lefthandpinky3",
         "LHandPinky4":    "lefthandpinky4",
-        "LWrist":         "lefthand",
+        "RShoulder":      "rightshoulder",
+        "RArm":           "rightarm",
+        "RElbow":         "rightforearm",
+        "RWrist":         "righthand",
+        "RHandThumb":     "righthandthumb1",
+        "RHandThumb2":    "righthandthumb2",
+        "RHandThumb3":    "righthandthumb3",
+        "RHandThumb4":    "righthandthumb4",
+        "RHandIndex":     "righthandindex1",
+        "RHandIndex2":    "righthandindex2",
+        "RHandIndex3":    "righthandindex3",
+        "RHandIndex4":    "righthandindex4",
+        "RHandMiddle":    "righthandmiddle1",
+        "RHandMiddle2":   "righthandmiddle2",
+        "RHandMiddle3":   "righthandmiddle3",
+        "RHandMiddle4":   "righthandmiddle4",
+        "RHandRing":      "righthandring1",
+        "RHandRing2":     "righthandring2",
+        "RHandRing3":     "righthandring3",
+        "RHandRing4":     "righthandring4",
+        "RHandPinky":     "righthandpinky1",
+        "RHandPinky2":    "righthandpinky2",
+        "RHandPinky3":    "righthandpinky3",
+        "RHandPinky4":    "righthandpinky4",
         "LUpLeg":         "leftupleg",
         "LLeg":           "leftleg",
         "LFoot":          "leftfoot",
@@ -10524,6 +10547,282 @@ class AnimationRetargeting {
         "RLeg":           "rightleg",
         "RFoot":          "rightfoot",
     };
+
+    static boneHierarchy = {
+        "LEye":           6,
+        "REye":           6,
+        "Head":           5,
+        "Neck":           4,
+        "ShouldersUnion": 3, // chest
+        "Stomach":  	  2,
+        "BelowStomach":   1,
+        "Hips":			  0,
+        "RShoulder":      4,
+        "RArm":           5,
+        "RElbow":         6,
+        "RWrist":         7,
+        "RHandThumb":     8,
+        "RHandThumb2":    9,
+        "RHandThumb3":    10,
+        "RHandThumb4":    11,
+        "RHandIndex":     8,
+        "RHandIndex2":    9,
+        "RHandIndex3":    10,
+        "RHandIndex4":    11,
+        "RHandMiddle":    8,
+        "RHandMiddle2":   9,
+        "RHandMiddle3":   10,
+        "RHandMiddle4":   11,
+        "RHandRing":      8,
+        "RHandRing2":     9,
+        "RHandRing3":     10,
+        "RHandRing4":     11,
+        "RHandPinky":     8,
+        "RHandPinky2":    9,
+        "RHandPinky3":    10,
+        "RHandPinky4":    11,
+        "LShoulder":      4,
+        "LArm":           5,
+        "LElbow":         6,
+        "LWrist":         7,
+        "LHandThumb":     8,
+        "LHandThumb2":    9,
+        "LHandThumb3":    10,
+        "LHandThumb4":    11,
+        "LHandIndex":     8,
+        "LHandIndex2":    9,
+        "LHandIndex3":    10,
+        "LHandIndex4":    11,
+        "LHandMiddle":    8,
+        "LHandMiddle2":   9,
+        "LHandMiddle3":   10,
+        "LHandMiddle4":   11,
+        "LHandRing":      8,
+        "LHandRing2":     9,
+        "LHandRing3":     10,
+        "LHandRing4":     11,
+        "LHandPinky":     8,
+        "LHandPinky2":    9,
+        "LHandPinky3":    10,
+        "LHandPinky4":    11,
+        "LUpLeg":         1,
+        "LLeg":           2,
+        "LFoot":          3,
+        "RUpLeg":         1,
+        "RLeg":           2,
+        "RFoot":          3,
+    };
+
+    static standardBones = () => {
+        const Hips = new THREE.Bone();
+        Hips.name = "Hips";
+        const BelowStomach = new THREE.Bone();
+        BelowStomach.name = "BelowStomach";
+        const Stomach = new THREE.Bone();
+        Stomach.name = "Stomach";
+        const ShouldersUnion = new THREE.Bone();
+        ShouldersUnion.name = "ShouldersUnion";
+        const Neck = new THREE.Bone();
+        Neck.name = "Neck";
+        const Head = new THREE.Bone();
+        Head.name = "Head";
+        const LEye = new THREE.Bone();
+        LEye.name = "LEye";
+        const REye = new THREE.Bone();
+        REye.name = "REye";
+        const LShoulder = new THREE.Bone();
+        LShoulder.name = "LShoulder";
+        const LArm = new THREE.Bone();
+        LArm.name = "LArm";
+        const LElbow = new THREE.Bone();
+        LElbow.name = "LElbow";
+        const LWrist = new THREE.Bone();
+        LWrist.name = "LWrist";
+        const LHandThumb = new THREE.Bone();
+        LHandThumb.name = "LHandThumb";
+        const LHandThumb2 = new THREE.Bone();
+        LHandThumb2.name = "LHandThumb2";
+        const LHandThumb3 = new THREE.Bone();
+        LHandThumb3.name = "LHandThumb3";
+        const LHandThumb4 = new THREE.Bone();
+        LHandThumb4.name = "LHandThumb4";
+        const LHandIndex = new THREE.Bone();
+        LHandIndex.name = "LHandIndex";
+        const LHandIndex2 = new THREE.Bone();
+        LHandIndex2.name = "LHandIndex2";
+        const LHandIndex3 = new THREE.Bone();
+        LHandIndex3.name = "LHandIndex3";
+        const LHandIndex4 = new THREE.Bone();
+        LHandIndex4.name = "LHandIndex4";
+        const LHandMiddle = new THREE.Bone();
+        LHandMiddle.name = "LHandMiddle";
+        const LHandMiddle2 = new THREE.Bone();
+        LHandMiddle2.name = "LHandMiddle2";
+        const LHandMiddle3 = new THREE.Bone();
+        LHandMiddle3.name = "LHandMiddle3";
+        const LHandMiddle4 = new THREE.Bone();
+        LHandMiddle4.name = "LHandMiddle4";
+        const LHandRing = new THREE.Bone();
+        LHandRing.name = "LHandRing";
+        const LHandRing2 = new THREE.Bone();
+        LHandRing2.name = "LHandRing2";
+        const LHandRing3 = new THREE.Bone();
+        LHandRing3.name = "LHandRing3";
+        const LHandRing4 = new THREE.Bone();
+        LHandRing4.name = "LHandRing4";
+        const LHandPinky = new THREE.Bone();
+        LHandPinky.name = "LHandPinky";
+        const LHandPinky2 = new THREE.Bone();
+        LHandPinky2.name = "LHandPinky2";
+        const LHandPinky3 = new THREE.Bone();
+        LHandPinky3.name = "LHandPinky3";
+        const LHandPinky4 = new THREE.Bone();
+        LHandPinky4.name = "LHandPinky4";
+        const RShoulder = new THREE.Bone();
+        RShoulder.name = "RShoulder";
+        const RArm = new THREE.Bone();
+        RArm.name = "RArm";
+        const RElbow = new THREE.Bone();
+        RElbow.name = "RElbow";
+        const RWrist = new THREE.Bone();
+        RWrist.name = "RWrist";
+        const RHandThumb = new THREE.Bone();
+        RHandThumb.name = "RHandThumb";
+        const RHandThumb2 = new THREE.Bone();
+        RHandThumb2.name = "RHandThumb2";
+        const RHandThumb3 = new THREE.Bone();
+        RHandThumb3.name = "RHandThumb3";
+        const RHandThumb4 = new THREE.Bone();
+        RHandThumb4.name = "RHandThumb4";
+        const RHandIndex = new THREE.Bone();
+        RHandIndex.name = "RHandIndex";
+        const RHandIndex2 = new THREE.Bone();
+        RHandIndex2.name = "RHandIndex2";
+        const RHandIndex3 = new THREE.Bone();
+        RHandIndex3.name = "RHandIndex3";
+        const RHandIndex4 = new THREE.Bone();
+        RHandIndex4.name = "RHandIndex4";
+        const RHandMiddle = new THREE.Bone();
+        RHandMiddle.name = "RHandMiddle";
+        const RHandMiddle2 = new THREE.Bone();
+        RHandMiddle2.name = "RHandMiddle2";
+        const RHandMiddle3 = new THREE.Bone();
+        RHandMiddle3.name = "RHandMiddle3";
+        const RHandMiddle4 = new THREE.Bone();
+        RHandMiddle4.name = "RHandMiddle4";
+        const RHandRing = new THREE.Bone();
+        RHandRing.name = "RHandRing";
+        const RHandRing2 = new THREE.Bone();
+        RHandRing2.name = "RHandRing2";
+        const RHandRing3 = new THREE.Bone();
+        RHandRing3.name = "RHandRing3";
+        const RHandRing4 = new THREE.Bone();
+        RHandRing4.name = "RHandRing4";
+        const RHandPinky = new THREE.Bone();
+        RHandPinky.name = "RHandPinky";
+        const RHandPinky2 = new THREE.Bone();
+        RHandPinky2.name = "RHandPinky2";
+        const RHandPinky3 = new THREE.Bone();
+        RHandPinky3.name = "RHandPinky3";
+        const RHandPinky4 = new THREE.Bone();
+        RHandPinky4.name = "RHandPinky4";
+        const LUpLeg = new THREE.Bone();
+        LUpLeg.name = "LUpLeg";
+        const LLeg = new THREE.Bone();
+        LLeg.name = "LLeg";
+        const LFoot = new THREE.Bone();
+        LFoot.name = "LFoot";
+        const RUpLeg = new THREE.Bone();
+        RUpLeg.name = "RUpLeg";
+        const RLeg = new THREE.Bone();
+        RLeg.name = "RLeg";
+        const RFoot = new THREE.Bone();
+        RFoot.name = "RFoot";
+
+        Hips.add(BelowStomach);
+
+        BelowStomach.add(Stomach);
+        Stomach.add(ShouldersUnion);
+
+        ShouldersUnion.add(Neck);
+        ShouldersUnion.add(LShoulder);
+        ShouldersUnion.add(RShoulder);
+        
+        Neck.add(Head);
+        Head.add(LEye);
+        Head.add(REye);
+
+        LShoulder.add(LArm);
+        LArm.add(LElbow);
+        LElbow.add(LWrist);
+
+        LWrist.add(LHandThumb);
+        LWrist.add(LHandIndex);
+        LWrist.add(LHandMiddle);
+        LWrist.add(LHandRing);
+        LWrist.add(LHandPinky);
+
+        LHandThumb.add(LHandThumb2);
+        LHandThumb2.add(LHandThumb3);
+        LHandThumb3.add(LHandThumb4);
+
+        LHandIndex.add(LHandIndex2);
+        LHandIndex2.add(LHandIndex3);
+        LHandIndex3.add(LHandIndex4);
+
+        LHandMiddle.add(LHandMiddle2);
+        LHandMiddle2.add(LHandMiddle3);
+        LHandMiddle3.add(LHandMiddle4);
+
+        LHandRing.add(LHandRing2);
+        LHandRing2.add(LHandRing3);
+        LHandRing3.add(LHandRing4);
+
+        LHandPinky.add(LHandPinky2);
+        LHandPinky2.add(LHandPinky3);
+        LHandPinky3.add(LHandPinky4);
+
+        RShoulder.add(RArm);
+        RArm.add(RElbow);
+        RElbow.add(RWrist);
+
+        RWrist.add(RHandThumb);
+        RWrist.add(RHandIndex);
+        RWrist.add(RHandMiddle);
+        RWrist.add(RHandRing);
+        RWrist.add(RHandPinky);
+
+        RHandThumb.add(RHandThumb2);
+        RHandThumb2.add(RHandThumb3);
+        RHandThumb3.add(RHandThumb4);
+
+        RHandIndex.add(RHandIndex2);
+        RHandIndex2.add(RHandIndex3);
+        RHandIndex3.add(RHandIndex4);
+
+        RHandMiddle.add(RHandMiddle2);
+        RHandMiddle2.add(RHandMiddle3);
+        RHandMiddle3.add(RHandMiddle4);
+
+        RHandRing.add(RHandRing2);
+        RHandRing2.add(RHandRing3);
+        RHandRing3.add(RHandRing4);
+
+        RHandPinky.add(RHandPinky2);
+        RHandPinky2.add(RHandPinky3);
+        RHandPinky3.add(RHandPinky4);
+
+        Hips.add(LUpLeg);
+        LUpLeg.add(LLeg);
+        LLeg.add(LFoot);
+
+        Hips.add(RUpLeg);
+        RUpLeg.add(RLeg);
+        RLeg.add(RFoot);
+
+        return [ Hips, BelowStomach, Stomach, ShouldersUnion, Neck, Head, LEye, REye, LShoulder, LArm, LElbow, LWrist, LHandThumb, LHandThumb2, LHandThumb3, LHandThumb4, LHandIndex, LHandIndex2, LHandIndex3, LHandIndex4, LHandMiddle, LHandMiddle2, LHandMiddle3, LHandMiddle4, LHandRing, LHandRing2, LHandRing3, LHandRing4, LHandPinky, LHandPinky2, LHandPinky3, LHandPinky4, RShoulder, RArm, RElbow, RWrist, RHandThumb, RHandThumb2, RHandThumb3, RHandThumb4, RHandIndex, RHandIndex2, RHandIndex3, RHandIndex4, RHandMiddle, RHandMiddle2, RHandMiddle3, RHandMiddle4, RHandRing, RHandRing2, RHandRing3, RHandRing4, RHandPinky, RHandPinky2, RHandPinky3, RHandPinky4, LUpLeg, LLeg, LFoot, RUpLeg, RLeg, RFoot ];
+    
+    }
     /**
      * Retargets animations and/or current poses from one skeleton to another. 
      * Both skeletons must have the same bind pose (same orientation for each mapped bone) in order to properly work.
@@ -10670,16 +10969,16 @@ class AnimationRetargeting {
         else {
             // automap
             const auxBoneMap = Object.keys(AnimationRetargeting.boneMap);
-            this.srcBoneMap = computeAutoBoneMap( srcSkeleton );
-            this.trgBoneMap = computeAutoBoneMap( trgSkeleton );
-            if(this.srcBoneMap.idxMap.length && this.trgBoneMap.idxMap.length) {
+            const srcBoneMap = computeAutoBoneMap( srcSkeleton );
+            const trgBoneMap = computeAutoBoneMap( trgSkeleton );
+            if(srcBoneMap.idxMap.length && trgBoneMap.idxMap.length) {
                 for(let i = 0; i < auxBoneMap.length; i++) {           
                     const name = auxBoneMap[i];
-                    if(this.srcBoneMap.idxMap[i] < 0) {
+                    if(srcBoneMap.idxMap[i] < 0) {
                         continue;
                     }
-                    result.idxMap[this.srcBoneMap.idxMap[i]] = this.trgBoneMap.idxMap[i];
-                    result.nameMap[ this.srcBoneMap.nameMap[name]] = this.trgBoneMap.nameMap[name]; 
+                    result.idxMap[ srcBoneMap.idxMap[i]] = trgBoneMap.idxMap[i];
+                    result.nameMap[ srcBoneMap.nameMap[name]] = trgBoneMap.nameMap[name]; 
                 }
             }
         }
@@ -10826,7 +11125,7 @@ class AnimationRetargeting {
             }
         }
         // TODO missing interpolation mode. Assuming always linear. Also check if arrays are copied or referenced
-        return new THREE.VectorKeyframeTrack( this.boneMap.nameMap[ boneName ] + ".position", srcTrack.times, trgValues ); 
+        return new THREE.VectorKeyframeTrack( this.boneMap.nameMap[ boneName ] + ".position", srcTrack.times.slice(), trgValues ); 
     }
     
     /**
@@ -10854,7 +11153,7 @@ class AnimationRetargeting {
         }
 
         // TODO missing interpolation mode. Assuming always linear
-        return new THREE.QuaternionKeyframeTrack( this.boneMap.nameMap[ boneName ] + ".quaternion", srcTrack.times, trgValues ); 
+        return new THREE.QuaternionKeyframeTrack( this.boneMap.nameMap[ boneName ] + ".quaternion", srcTrack.times.slice(), trgValues ); 
     }
 
     /**
@@ -10872,7 +11171,7 @@ class AnimationRetargeting {
         // TODO
 
         // TODO missing interpolation mode. Assuming always linear. Also check if arrays are copied or referenced
-        return new THREE.VectorKeyframeTrack( this.boneMap.nameMap[ boneName ] + ".scale", srcTrack.times, srcTrack.values ); 
+        return new THREE.VectorKeyframeTrack( this.boneMap.nameMap[ boneName ] + ".scale", srcTrack.times.slice(), srcTrack.values.slice() ); 
     }
 
     /**
@@ -11170,31 +11469,109 @@ function alignBoneToAxis(resultSkeleton, origin, end = null, axis ) {
  * @param {THREE.Skeleton} srcSkeleton 
  * @returns {object} { idxMap: [], nameMape: {} }
  */
-function computeAutoBoneMap( skeleton ){
-    const auxBoneMap = Object.keys(AnimationRetargeting.boneMap);
+function computeAutoBoneMap( skeleton){
+    let auxBones = AnimationRetargeting.standardBones();
+
     let bones = skeleton.bones;
     let result = {
-        idxMap: new Int16Array( auxBoneMap.length ),
+        idxMap: new Int16Array( auxBones.length ),
         nameMap: {} 
     };
-
+    
     result.idxMap.fill( -1 ); // default to no map;
-    // automap
-    for(let i = 0; i < auxBoneMap.length; i++) {
-        const auxName = auxBoneMap[i];
-        for( let j = 0; j < bones.length; ++j ){
-            let name = bones[j].name;
-            if ( typeof( name ) !== "string" ){ continue; }
-            name = name.toLowerCase().replace( "mixamorig", "" ).replace( /[`~!@#$%^&*()_|+\-=?;:'"<>\{\}\\\/]/gi, "" );
-            if ( name.length < 1 ){ continue; }
-            if(name.toLowerCase().includes(auxName.toLocaleLowerCase()) || name.toLowerCase().includes(AnimationRetargeting.boneMap[auxName].toLocaleLowerCase())) {
-                result.nameMap[auxName] = bones[j].name;
+    for( let i = 0; i < auxBones.length; i++ ) {
+        const auxBoneName = auxBones[i].name;
+
+        for( let j = 0; j < bones.length; ++j ) {
+            let boneName = bones[j].name;
+
+            if( typeof( boneName ) !== "string" ) { continue; }
+            boneName = boneName.toLowerCase().replace( "mixamorig", "" ).replace( /[`~!@#$%^&*()_|+\-=?;:'"<>\{\}\\\/]/gi, "" );
+            if( boneName.length < 1 ) { continue; }
+            
+            if( boneName.toLowerCase() == auxBoneName.toLocaleLowerCase() || boneName.toLowerCase() == AnimationRetargeting.boneMap[auxBoneName].toLocaleLowerCase()) {
+                result.nameMap[auxBoneName] = bones[j].name;
                 result.idxMap[i] = j;
                 break;
             }
-        }                
+        }
     }
+
+    //assumes bone 0 is root (hips)
+    const auxData = computeHierarchyData(auxBones[0]);
+    const boneData = computeHierarchyData(bones[0]);
+ 
+    // mapping based on hierarchy
+    for( let i = 0; i < auxBones.length; i++ ) {
+        const auxBoneName = auxBones[i].name;
+        if( result.nameMap[auxBoneName] ) {
+            continue;
+        }
+        const auxBone = auxBones[i];
+        const auxBoneInfo = getBoneInfo( auxBone, auxData.depth, auxData.descendantCount);
+
+        for (let j = 0; j < bones.length; j++) {
+            if (result.idxMap.indexOf(j) > -1 ) continue;
+            
+            const bone = bones[j];
+            const boneInfo = getBoneInfo(bone, boneData.depth, boneData.descendantCount);
+
+            if (sameBoneInfo(auxBoneInfo, boneInfo)) {
+                result.nameMap[auxBoneName] = bones[j].name;
+                result.idxMap[i] = j;
+                break
+            }
+        }
+
+        if (!result.nameMap[auxBoneName]) {
+            console.warn( 'Failed to match bone by hierarchy structure: ' + auxBoneName);
+        }
+    }
+
     return result;
+}
+
+function computeHierarchyData( root ) {
+  const depth = {};
+  const descendantCount = {};
+
+  const traverse = (bone, d) => {
+    depth[bone.name] = d;
+    let count = 0;
+
+    for (let i = 0; i < bone.children.length; i++) {
+      const child = bone.children[i];
+      if (child.isBone) {
+        count += 1 + traverse(child, d + 1);
+      }
+    }
+
+    descendantCount[bone.name] = count;
+    return count
+  };
+
+  traverse(root, 0);
+  return { depth, descendantCount }
+}
+
+function getBoneInfo(bone, depth, descendantCount) {
+   const info = 
+   {
+    depth: depth[bone.name],
+    parentDepth: (bone.parent && bone.parent.isBone) ? depth[bone.parent.name] : -1,
+    childCount: bone.children.length,
+    descendantCount: descendantCount[bone.name]
+  };
+  return info;
+}
+
+function sameBoneInfo(a, b) {
+  return (
+    a.depth === b.depth &&
+    a.parentDepth === b.parentDepth &&
+    a.childCount === b.childCount //&&
+    //a.descendantCount === b.descendantCount
+  )
 }
 
 // Correct negative blenshapes shader of ThreeJS
@@ -12624,7 +13001,7 @@ class KeyframeApp {
         this.trajectoriesHelper = null;
         this.trajectoriesStart = 0;
         this.trajectoriesEnd = 0;
-        this.showTrajectories = false;
+        this.trajectoriesActive = false;
         this.trajectoriesComputationPending = true;
 
         fetch( 'https://resources.gti.upf.edu/3Dcharacters/Eva_Low/Eva_Low.json').then(response => response.json()).then(data => this.stardardConfig = data);
@@ -12665,7 +13042,7 @@ class KeyframeApp {
         }
         this.trajectoriesHelper = new TrajectoriesHelper(  this.loadedCharacters[avatarName].model,  this.loadedCharacters[avatarName].mixer );
         this.trajectoriesComputationPending = true;
-        if(this.showTrajectories) {
+        if(this.trajectoriesActive) {
             this.trajectoriesHelper.show();
         }
         else {
@@ -12675,8 +13052,8 @@ class KeyframeApp {
         this.mixer = this.loadedCharacters[avatarName].mixer;          
         this.onChangeAnimation(this.currentAnimation, true);
         this.changePlayState(this.playing);
-        const LToePos = this.loadedCharacters[avatarName].skeleton.getBoneByName(this.loadedCharacters[avatarName].LToeName).getWorldPosition(new THREE.Vector3);
-        this.loadedCharacters[avatarName].skeleton.getBoneByName(this.loadedCharacters[avatarName].RToeName).getWorldPosition(new THREE.Vector3);
+        const LToePos = this.loadedCharacters[avatarName].skeleton.getBoneByName(this.loadedCharacters[avatarName].LToeName).getWorldPosition(new THREE.Vector3());
+        this.loadedCharacters[avatarName].skeleton.getBoneByName(this.loadedCharacters[avatarName].RToeName).getWorldPosition(new THREE.Vector3());
         let diff = this.loadedCharacters[avatarName].LToePos.y - LToePos.y; 
         
         this.loadedCharacters[avatarName].model.position.y = this.loadedCharacters[avatarName].position.y - this.loadedCharacters[avatarName].diffToGround + diff;
@@ -12745,8 +13122,8 @@ class KeyframeApp {
         this.mixer.update(0.1);
         this.mixer.update(0);
 
-        const LToePos = this.loadedCharacters[this.currentCharacter].model.getObjectByName(this.loadedCharacters[this.currentCharacter].LToeName).getWorldPosition(new THREE.Vector3);
-        this.loadedCharacters[this.currentCharacter].model.getObjectByName(this.loadedCharacters[this.currentCharacter].RToeName).getWorldPosition(new THREE.Vector3);
+        const LToePos = this.loadedCharacters[this.currentCharacter].model.getObjectByName(this.loadedCharacters[this.currentCharacter].LToeName).getWorldPosition(new THREE.Vector3());
+        this.loadedCharacters[this.currentCharacter].model.getObjectByName(this.loadedCharacters[this.currentCharacter].RToeName).getWorldPosition(new THREE.Vector3());
         let diff = this.loadedCharacters[this.currentCharacter].LToePos.y - LToePos.y; 
         
         this.loadedCharacters[this.currentCharacter].model.position.y = this.loadedCharacters[this.currentCharacter].position.y - this.loadedCharacters[this.currentCharacter].diffToGround + diff;
@@ -12757,14 +13134,13 @@ class KeyframeApp {
         
         this.trajectoriesStart = 0;
         this.trajectoriesEnd = bindedAnim.mixerBodyAnimation.duration;
-        if(this.showTrajectories) {
-            this.trajectoriesHelper.computeTrajectories(bindedAnim);
-            this.trajectoriesComputationPending = false;
-            this.trajectoriesHelper.show();
+        if(this.trajectoriesActive) {
+            this.computeTrajectories( bindedAnim );
+            this.showTrajectories();
         }
         else {
             this.trajectoriesComputationPending = true;
-            this.trajectoriesHelper.hide();
+            this.hideTrajectories();
         }
     }
     
@@ -12821,20 +13197,37 @@ class KeyframeApp {
     }
 
     onMessage( data, callback ) {
-        this.processMessageFiles(data.data).then( (processedAnimationNames) => {
-            if( processedAnimationNames) {
-                for(let i = 0; i < processedAnimationNames.length; i++) {
-
-                    this.bindAnimationToCharacter(processedAnimationNames[i], this.currentCharacter);
-                }
-                this.currentAnimation = processedAnimationNames[0];
+        if( data.data.constructor == String ) {
+            let dataFile = this.BVHLoader.parseExtended(data.data);
+            let name = data.name;
+            if(this.loadedAnimations[name]) {
+                let filename = name.split(".");
+                filename.pop();
+                filename.join('.');
+                name = name + "_"+ filename;
             }
-            
+            this.loadBVHAnimation( name, dataFile );
+            this.currentAnimation = name;
             if(callback) {
-                callback(processedAnimationNames);
+                callback([name]);
             }
-            //this.gui.animationDialog.refresh();
-        });
+        }
+        else {
+            this.processMessageFiles(data.data).then( (processedAnimationNames) => {
+                if( processedAnimationNames) {
+                    for(let i = 0; i < processedAnimationNames.length; i++) {
+    
+                        this.bindAnimationToCharacter(processedAnimationNames[i], this.currentCharacter);
+                    }
+                    this.currentAnimation = processedAnimationNames[0];
+                }
+                
+                if(callback) {
+                    callback(processedAnimationNames);
+                }
+                //this.gui.animationDialog.refresh();
+            });
+        }
     }
     /* 
     * Given an array of animations of type { name: "", data: "" } where "data" is Blob of text/plain type 
@@ -12848,7 +13241,14 @@ class KeyframeApp {
 
         for(let i = 0; i < files.length; i++) {
             const file = files[i];
-            const extension = file.name.substr(file.name.lastIndexOf(".") + 1);            if(extension == 'bvh' || extension == 'bvhe') {
+            let path = file.name;
+            let extension = path.substr(path.lastIndexOf(".") + 1);
+            const compressed = extension.includes("gz");
+            if( compressed ) {
+                path = path.replace(".gz", "");
+                extension = path.substr(path.lastIndexOf(".") + 1);
+            }
+            if(extension == 'bvh' || extension == 'bvhe') {
                 loader = this.BVHLoader;
                 type = 'bvh';
             }
@@ -12863,8 +13263,11 @@ class KeyframeApp {
             let filePromise = null;
             if(type == 'bvh') {
                
-                filePromise = new Promise(resolve => {
+                filePromise = new Promise(async resolve => {
                     const loadData = (dataFile) => {
+                        if( compressed ) {
+                            dataFile = pako.ungzip(new Uint8Array(dataFile), { to: 'string' });
+                        }
                         let data = this.BVHLoader.parseExtended(dataFile);
                         let name = file.name;
                         if(this.loadedAnimations[name]) {
@@ -12886,26 +13289,35 @@ class KeyframeApp {
                     let data = file.data ?? file;
                    
                     if(file.constructor.name == File.name || file.data && typeof(file.data) == 'object') {
-                        reader.readAsText(data);
+                        if(file.type == "application/x-gzip") {
+                            reader.readAsArrayBuffer(data);
+                        }
+                        else {
+                            reader.readAsText(data);
+                        }
                     }
                     else if(file.data && typeof(file.data) == 'string') {
                         loadData(file.data);
                     }
                     else {
-                        fetch(file.name || file)
-                        .then( (response) => {
+                        const response = await fetch(file.name || file);
+                        try {
                             if (response.ok) {
-                            response.text().then( (text) => {
-                                loadData(text);
-                            });
+                                let data = null;
+                                if( compressed ) {
+                                    data = await response.arrayBuffer();
+                                }
+                                else {
+                                    data = await response.text();
+                                }
+                                loadData(data);
                             } else {
                                 console.log("Not found");
                             }
-                        })
-                        .catch(function (error) {
+                        }
+                        catch( error ) {
                             console.log("Error:" + error.message);
-                        });        
-                    } 
+                        }                    } 
                     
                 });
             }
@@ -12997,7 +13409,7 @@ class KeyframeApp {
                 });
             }   
 
-            promises.push(filePromise);           
+            promises.push(filePromise);
         }
        
         return Promise.all(promises);
@@ -13405,6 +13817,50 @@ class KeyframeApp {
         return animations;
     }
     
+    computeTrajectories( animation ) {
+        if( !this.trajectoriesHelper || !animation ) {
+            return;
+        }
+        this.trajectoriesHelper.computeTrajectories( animation );
+        this.trajectoriesComputationPending = false;
+    }
+
+    updateTrajectories( start, end ) {
+        if( ! this.trajectoriesHelper ) {
+            return;
+        }
+
+        this.trajectoriesStart = start;
+        this.trajectoriesEnd = end;
+        this.trajectoriesHelper.updateTrajectories(start, end);
+    }
+
+    showTrajectories() {
+        if( !this.trajectoriesHelper ) {
+            return;
+        }
+        this.trajectoriesHelper.show();
+        this.trajectoriesActive = true;
+
+        // window.localStorage.setItem("trajectories", this.trajectoriesActive);
+        
+        if( !this.bindedAnimations[this.currentAnimation] ) {
+            return;
+        }
+        if( this.trajectoriesComputationPending ) {
+            const boundAnim = this.bindedAnimations[this.currentAnimation][this.currentCharacter];
+            this.computeTrajectories( boundAnim );
+        }
+    }
+
+    hideTrajectories() {
+        if( ! this.trajectoriesHelper ) {
+            return;
+        }
+        this.trajectoriesHelper.hide();
+        this.trajectoriesActive = false;
+        // window.localStorage.setItem("trajectories", this.trajectoriesActive);
+    }
 }
 
 // Correct negative blenshapes shader of ThreeJS
@@ -13425,12 +13881,11 @@ class Performs {
         this.camera = null;
         this.cameras = [];
         this.controls = [];
-        this.cameraMode = 0;
+        this.cameraRestricted = true;
 
         this.loadedCharacters = {};
         this.currentCharacter = null;
 
-        this.speed = 1;
         this.backPlane = null;
         this.avatarShirt = null;
         this.autoplay = false;
@@ -13441,10 +13896,10 @@ class Performs {
         
         this.isAppReady = false;
         this.pendingMessageReceived = null;
-        this.showControls = true;
+        this.controlsActive = true;
 
-        this.sceneColor = 0x46c219;
-        this.background = PERFORMS.Backgrounds.OPEN;
+        this.sceneColor = "#46c219";
+        this.background = window.localStorage.getItem("background") || PERFORMS.Backgrounds.OPEN;
 
         this.logo = "./data/imgs/performs2.png";
         this.videoBackground = null;
@@ -13455,11 +13910,84 @@ class Performs {
         this._atelier = null;
 
         this.raycaster = new THREE.Raycaster();
+
+        this.avatars = window.localStorage.getItem("avatars") ? JSON.parse(window.localStorage.getItem("avatars")) : {
+            "Eva": [PERFORMS.AVATARS_URL+'Eva_Low/Eva_Low.glb', PERFORMS.AVATARS_URL+'Eva_Low/Eva_Low.json', 0, PERFORMS.AVATARS_URL+'Eva_Low/Eva_Low.png'],
+            "Ready Eva": [PERFORMS.AVATARS_URL+'ReadyEva/ReadyEva.glb', PERFORMS.AVATARS_URL+'ReadyEva/ReadyEva_v3.json', 0, PERFORMS.AVATARS_URL+'ReadyEva/ReadyEva.png'],
+            "Victor": [PERFORMS.AVATARS_URL+'Victor/Victor.glb', PERFORMS.AVATARS_URL+'Victor/Victor.json', 0, PERFORMS.AVATARS_URL+'Victor/Victor.png'],
+            "Sara": [PERFORMS.AVATARS_URL+'Sara/Sara.glb', PERFORMS.AVATARS_URL+'Sara/Sara.json', 0, PERFORMS.AVATARS_URL+'Sara/Sara.png'],
+            "Nia": [PERFORMS.AVATARS_URL+'Nia/Nia.glb', PERFORMS.AVATARS_URL+'Nia/Nia.json', 0, PERFORMS.AVATARS_URL+'Nia/Nia.png'],
+            "Joan": [PERFORMS.AVATARS_URL+'Joan/Joan.glb', PERFORMS.AVATARS_URL+'Joan/Joan.json', 0, PERFORMS.AVATARS_URL+'Joan/Joan.png'],
+            "David": [PERFORMS.AVATARS_URL+'David/David.glb', PERFORMS.AVATARS_URL+'David/David.json', 0, PERFORMS.AVATARS_URL+'David/David.png'],
+            "Alex": [PERFORMS.AVATARS_URL+'Alex/Alex.glb', PERFORMS.AVATARS_URL+'Alex/Alex.json', 0, PERFORMS.AVATARS_URL+'Alex/Alex.png'],
+            "Noa": [PERFORMS.AVATARS_URL+'Noa/Noa.glb', PERFORMS.AVATARS_URL+'Noa/Noa.json', 0, PERFORMS.AVATARS_URL+'Noa/Noa.png'],
+            "Witch": [PERFORMS.AVATARS_URL+'Eva_Witch/Eva_Witch.glb', PERFORMS.AVATARS_URL+'Eva_Witch/Eva_Witch.json', 0, PERFORMS.AVATARS_URL+'Eva_Witch/Eva_Witch.png'],
+            "Kevin": [PERFORMS.AVATARS_URL+'Kevin/Kevin.glb', PERFORMS.AVATARS_URL+'Kevin/Kevin.json', 0, PERFORMS.AVATARS_URL+'Kevin/Kevin.png'],
+            "Ada": [PERFORMS.AVATARS_URL+'Ada/Ada.glb', PERFORMS.AVATARS_URL+'Ada/Ada.json', 0, PERFORMS.AVATARS_URL+'Ada/Ada.png'],
+            // "Eva": ['https://models.readyplayer.me/66e30a18eca8fb70dcadde68.glb', PERFORMS.AVATARS_URL+'ReadyEva/ReadyEva_v3.json',0, 'https://models.readyplayer.me/66e30a18eca8fb70dcadde68.png?background=68,68,68']
+        };
+
+        window.onbeforeunload = () => {
+            // window.localStorage.setItem("color", value);
+            window.localStorage.setItem("background", this.background);
+            if( this.currentCharacter ) {
+                const model = this.currentCharacter.model;
+                const avatarName = model.name;
+                window.localStorage.setItem("avatar", this.avatars[avatarName] ? avatarName : this.loadedCharacters[avatarName].path);
+
+                const config = this.avatars[avatarName] && this.avatars[avatarName][1] && this.avatars[avatarName][1].includes("http") ? this.avatars[avatarName][1] : JSON.stringify(this.currentCharacter.config);
+                window.localStorage.setItem("config", config);
+
+                //GUI
+                window.localStorage.setItem("position", model.position.x.toString() + "," + model.position.y.toString() + "," + model.position.z.toString());
+                window.localStorage.setItem("rotation", model.quaternion.x.toString() + "," + model.quaternion.y.toString() + "," + model.quaternion.z.toString() + "," + model.quaternion.w.toString());
+                window.localStorage.setItem("scale", model.scale.x.toString());
+                window.localStorage.setItem("avatars", JSON.stringify(this.avatars));
+
+                if( this.gui ) {
+                    window.localStorage.setItem("controls", this.gui.controlsActive);
+                }
+            }
+            window.localStorage.setItem("restrictView", this.cameraRestricted);
+
+            // Keyframe app
+            window.localStorage.setItem("trajectories", this.keyframeApp.trajectoriesActive);
+            window.localStorage.setItem("srcEmbeddedTransforms", this.keyframeApp.srcEmbedWorldTransforms);
+            window.localStorage.setItem("srcEmbeddedTransforms", this.keyframeApp.srcEmbedWorldTransforms);
+            window.localStorage.setItem("srcReferencePose", this.keyframeApp.srcPoseMode);
+            window.localStorage.setItem("trgReferencePose", this.keyframeApp.trgPoseMode);
+        };
     }
 
-    setSpeed( value ){ this.speed = value; }
-    // value (hex colour) in sRGB space 
-    setBackPlaneColour( value ){
+    setSpeed( value ){ 
+        if(this.mode == PERFORMS.Modes.KEYFRAME ) {
+            this.keyframeApp.speed = value;
+        }
+        else {
+            this.scriptApp.speed = value;
+        }
+    }
+    // value (hex color) in sRGB space 
+    setBackPlaneColor( value ) {
+        window.localStorage.setItem("color", value);
+
+        if(value == "#transparent") {
+            this.scene.background = null;
+            this.ground.material.color.set("#ffffff");
+            this.ground.material.opacity = 0.01;
+            if( this.gui ) {
+                this.gui.setTransparentBackground();
+            }
+            return;
+        }
+        if( !this.scene.background ) {
+            this.scene.background = new THREE.Color( value );
+            if( this.gui ) {
+                this.gui.restoreColorBackground();
+            }
+            this.ground.material.opacity = 0.1;
+        }
+        
         this.sceneColor = value;
         this.scene.background.set(value);
 
@@ -13482,6 +14010,7 @@ class Performs {
     
     setBackground( type, image = null ) {
         this.background = type;
+        // window.localStorage.setItem("background", this.background);
 
         switch(type) {
             case PERFORMS.Backgrounds.OPEN:
@@ -13622,8 +14151,8 @@ class Performs {
         this.texturePosition = position;
     }
 
-    // value (hex colour) in sRGB space 
-    setClothesColour( value ){
+    // value (hex color) in sRGB space 
+    setClothesColor( value ){
         if ( !this.avatarShirt ){ return false; }
         this.avatarShirt.material.color.set( value );   
         return true;
@@ -13633,24 +14162,20 @@ class Performs {
     // Change the default settings for the scene and the applications mode options
     async setConfiguration(settings, callback) {
 
-        let rotation = null;
-        if(settings.rotation) {
-            rotation = settings.rotation;
+        let rotation = settings.rotation || window.localStorage.getItem("rotation");
+        if(rotation) {
             rotation = rotation.split(',');    
             rotation = rotation.map(v => v = Number(v));        
         }
 
-        let position = null;
-        if(settings.position) {
-            position = settings.position;
+        let position = settings.position || window.localStorage.getItem("position");
+        if(position) {
             position = position.split(',');
             position = position.map(v => v = Number(v));
             // this.currentCharacter.model.position.fromArray(position);
         }
 
-        let scale = null;
-        if(settings.scale) {
-            scale = settings.scale;
+        let scale = settings.scale || window.localStorage.getItem("scale");        if(scale) {
             scale = Number(scale);
             scale = [scale, scale, scale];
             // this.currentCharacter.model.scale.fromArray([scale, scale, scale]);
@@ -13662,7 +14187,7 @@ class Performs {
                 if(typeof(clothColor) == 'string'){
                     clothColor = clothColor.replace('0x', '#');
                 }
-                this.setClothesColour(clothColor);
+                this.setClothesColor(clothColor);
             }
             if(rotation) {
                 this.currentCharacter.rotation = new THREE.Quaternion().fromArray(rotation);
@@ -13674,6 +14199,13 @@ class Performs {
                 this.currentCharacter.scale = new THREE.Vector3().fromArray(scale);
             }
 
+            if(settings.autoplay != undefined) {
+                this.autoplay = settings.autoplay;
+            }
+            else if(window.localStorage.getItem("autoplay") != undefined ){
+                this.autoplay = window.localStorage.getItem("autoplay");
+            }
+
             if(settings.animations) {
                 if(typeof(settings.animations) == 'string') {
                     settings.animations = JSON.parse(settings.animations);
@@ -13683,7 +14215,7 @@ class Performs {
                         this.keyframeApp.currentAnimation = animations[0];
                         this.changeMode(PERFORMS.Modes.KEYFRAME);
                         if(this.autoplay) {
-                            this.keyframeApp.changePlayState(true);
+                            this.changePlayState(true);
                         }
 
                         if(rotation) {
@@ -13698,23 +14230,31 @@ class Performs {
 
                             this.currentCharacter.model.scale.fromArray(scale);
                         }
-
-                        if(settings.onReady) {
-                            settings.onReady();
-                        }
+                        
                         if(callback) {
                             callback();
+                        }
+                        if(settings.onReady) {
+                            settings.onReady();
                         }
                     }
                 );
             }
             else if(settings.scripts) {
+                if(typeof(settings.scripts) == 'string') {
+                    try {
+                        // direct parse
+                        settings.scripts = JSON.parse(settings.scripts);
+                    } catch (e) {
+                        console.warn(e);
+                    }
+                }
                 this.scriptApp.processMessageFiles(settings.scripts).then(
                     (results) => {
                         this.scriptApp.onMessage(results);
                         this.changeMode(PERFORMS.Modes.SCRIPT);
                         if(this.autoplay) {
-                            this.scriptApp.replay();
+                            this.changePlayState();
                             if(this.videoBackground) {
                                 this.videoBackground.play();
                             }
@@ -13767,43 +14307,70 @@ class Performs {
         };
         
         if(settings.trajectories != undefined) {
-            this.keyframeApp.showTrajectories = JSON.parse(settings.trajectories);
+            this.keyframeApp.trajectoriesActive = JSON.parse(settings.trajectories);
         }
-       
-        if(settings.autoplay != undefined) {
-            this.autoplay = settings.autoplay;
+        else if(window.localStorage.getItem("trajectories") != undefined ){
+            this.keyframeApp.trajectoriesActive = JSON.parse(window.localStorage.getItem("trajectories"));
         }
+    
         
         if(settings.crossfade != undefined) {
             this.keyframeApp.useCrossFade = settings.crossfade;
         }
-
-        if(settings.srcEmbeddedTransforms != undefined) {
+        
+        if(settings.srcEmbeddedTransforms != undefined) {    
             this.keyframeApp.srcEmbedWorldTransforms = settings.srcEmbeddedTransforms;
         }
+        else if(window.localStorage.getItem("srcEmbeddedTransforms") != undefined ){
+            this.keyframeApp.srcEmbedWorldTransforms = window.localStorage.getItem("srcEmbeddedTransforms");
+        }
+
         if(settings.trgEmbeddedTransforms != undefined) {
             this.keyframeApp.trgEmbedWorldTransforms = settings.trgEmbeddedTransforms;
+        }
+        else if(window.localStorage.getItem("trgEmbedWorldTransforms") != undefined ){
+            this.keyframeApp.trgEmbedWorldTransforms = window.localStorage.getItem("trgEmbedWorldTransforms");
         }
 
         if(settings.srcReferencePose != undefined) {
             this.keyframeApp.srcPoseMode = settings.srcReferencePose;
         }
+        else if(window.localStorage.getItem("srcReferencePose") != undefined ){
+            this.keyframeApp.srcPoseMode = window.localStorage.getItem("srcReferencePose");
+        }
+
         if(settings.trgReferencePose != undefined) {
             this.keyframeApp.trgPoseMode = settings.trgReferencePose;
+        }
+        else if(window.localStorage.getItem("trgReferencePose") != undefined ){
+            this.keyframeApp.trgPoseMode = window.localStorage.getItem("trgReferencePose");
         }
 
         let loadConfig = true;
         if(settings.avatar) {
             let avatar = settings.avatar;
             const path = avatar.split(".");
-            let filename = path[path.length-2];
-            filename = filename.split("/");
-            filename = filename.pop();
-            
+            let filename = "";
+            let thumbnail = null;
+
+            if( path.length > 1 ) {
+                filename = path[path.length-2];
+                filename = filename.split("/");
+                filename = filename.pop();
+                
+                // avatar += avatar.includes('models.readyplayer.me') ? '?pose=T&morphTargets=ARKit&lod=1' : '';
+                // modelToLoad = [ avatar, options.config, new THREE.Quaternion(), filename];          
+            }
+            else if( this.avatars[path[0]] ) {
+
+                filename = path[0];
+                avatar = this.avatars[filename][0];
+                settings.config = settings.config || this.avatars[filename][1];
+                thumbnail = this.avatars[filename][3];
+            }
+
             if(!this.currentCharacter || this.currentCharacter && this.currentCharacter.model.name != filename) {
                 loadConfig = false;
-                $('#loading').fadeIn(); 
-                let thumbnail = null;
                 if( avatar.includes('models.readyplayer.me') ) {
                     avatar+= '?pose=T&morphTargets=ARKit&lod=1';
                     thumbnail =  "https://models.readyplayer.me/" + filename + ".png?background=68,68,68";
@@ -13814,14 +14381,14 @@ class Performs {
                 this.loadAvatar(avatar, settings.config, new THREE.Quaternion(), filename, () => {
                     this.changeAvatar( filename );
                     innerAvatarSettings(settings);
-    
-                    $('#loading').fadeOut(); //hide();               
+               
                 }, (err) => {
-                    $('#loading').fadeOut();
-                    alert("There was an error loading the avatar", "Avatar not loaded");
+                    console.error(err);
+                    if(callback) {
+                        callback(err);
+                    }
                 } );
             }
-            
         }
         if(loadConfig) {
             innerAvatarSettings(settings);
@@ -13857,13 +14424,17 @@ class Performs {
         }
 
         if(settings.controls != undefined) {
-            this.showControls = !(settings.controls === "false" || settings.controls === false);
+            this.controlsActive = !(settings.controls === "false" || settings.controls === false);
+        }
+        else if(window.localStorage.getItem("controls") != undefined ) {
+            const controls = window.localStorage.getItem("controls");
+            this.controlsActive = !(controls === "false" || controls === false);
         }
 
         // Default background
-        if(settings.background) {
-            let background = settings.background;
-            switch(background.toLocaleLowerCase()) {
+        let defaultBackground = settings.background || window.localStorage.getItem("background");
+        if( defaultBackground ) {
+            switch(defaultBackground.toLocaleLowerCase()) {
                 case 'studio':
                     this.background = PERFORMS.Backgrounds.STUDIO;
                     break;
@@ -13877,7 +14448,7 @@ class Performs {
         if(settings.img) {
             this.setBackground( PERFORMS.Backgrounds.PHOTOCALL);         
 
-            let image =settings.img;
+            let image = settings.img;
             const imgCallback = ( event ) => {
 
                 this.logo = event.target;        
@@ -13904,15 +14475,16 @@ class Performs {
         }
 
         // Default background color
-        if(settings.color) {
-            if(typeof(settings.color) == 'string'){
-                settings.color = settings.color.replace('0x', '#');
-                if(!settings.color.includes("#")) {
-                    settings.color = "#" + settings.color;
+        let defaultColor = settings.color || window.localStorage.getItem("color");
+        if(defaultColor) {
+            if(typeof(defaultColor) == 'string'){
+                defaultColor = defaultColor.replace('0x', '#');
+                if(!defaultColor.includes("#")) {
+                    defaultColor = "#" + defaultColor;
                 }
             }
-            this.sceneColor = settings.color;
-            this.setBackPlaneColour(this.sceneColor);                                  
+            this.sceneColor = defaultColor;
+            this.setBackPlaneColor(this.sceneColor);                                  
         }
 
         if(settings.offset) {
@@ -13940,11 +14512,19 @@ class Performs {
         
         if(settings.restrictView != undefined) {
             let view = (settings.restrictView === "false" || settings.restrictView === false);
-            this.changeCameraMode( view ); //moved here because it needs the backplane to exist
+            this.changeCameraMode( !view ); //moved here because it needs the backplane to exist
+        }
+        else if(window.localStorage.getItem("restrictView") != undefined ) {
+            let view = window.localStorage.getItem("restrictView");
+            view = !(view === "false" || view === false);
+            this.changeCameraMode( !view ); //moved here because it needs the backplane to exist
         }
 
         if(settings.applyIdle != undefined) {
             this.scriptApp.applyIdle = settings.applyIdle;
+        }
+        else if(window.localStorage.getItem("applyIdle") != undefined ) {
+            this.scriptApp.applyIdle = window.localStorage.getItem("applyIdle");
         }
     }
 
@@ -13960,9 +14540,9 @@ class Performs {
         }
 
         if(this.mode == PERFORMS.Modes.KEYFRAME && this.keyframeApp.currentAnimation) {
-            this.keyframeApp.onChangeAnimation(this.keyframeApp.currentAnimation, true);
+            this.changeAnimation(this.keyframeApp.currentAnimation, true);
             if(this.autoplay) {
-                this.keyframeApp.changePlayState(true);
+                this.changePlayState(true);
             }
         }
         if(this.gui) {
@@ -13970,26 +14550,52 @@ class Performs {
         }
     }
 
-    getSpeed( ){ return this.speed; }
+    changeAnimation( animation, needsUpdate = false ) {
+        if(this.mode == PERFORMS.Modes.KEYFRAME ) {
+            this.keyframeApp.onChangeAnimation(animation, needsUpdate);
+        }
+    }
 
-    // returns value (hex) with the colour in sRGB space
-    getBackPlaneColour(){       
+    changePlayState( play ) {
+        if(this.mode == PERFORMS.Modes.KEYFRAME ) {
+            this.keyframeApp.changePlayState(play);
+        }
+        else {
+            this.scriptApp.replay();
+        }
+    }
+
+    getSpeed( ) {
+        if(this.mode == PERFORMS.Modes.KEYFRAME ) {
+            return this.keyframeApp.speed;
+        }
+        else {
+            return this.scriptApp.speed;
+        }
+    }
+
+    // returns value (hex) with the color in sRGB space
+    getBackPlaneColor(){       
         return this.sceneColor; // css works in sRGB
     }
 
-    // returns value (hex) with the colour in sRGB space
-    getClothesColour(){
+    // returns value (hex) with the color in sRGB space
+    getClothesColor(){
         if ( !this.avatarShirt ){ return 0; }   
         return this.avatarShirt.material.color.getHexString(); // css works in sRGB
     }
 
+    loadFiles( files, callback ) {
+
+    }
+
     init(options) {        
         this.scene = new THREE.Scene();
-        const sceneColor = this.sceneColor = window.debugMode ? 0x4f4f9c : 0x46c219;
+        const sceneColor = this.sceneColor = window.debugMode ? "#4f4f9c ": "#46c219";
         this.scene.background = new THREE.Color( sceneColor );
 
         // renderer
-        this.renderer = new THREE.WebGLRenderer( { antialias: true } );
+        this.renderer = new THREE.WebGLRenderer( { antialias: true, alpha: true } );
         this.renderer.setPixelRatio( window.devicePixelRatio );
         this.renderer.setSize( window.innerWidth, window.innerHeight );
 
@@ -14000,19 +14606,19 @@ class Performs {
         // this.renderer.shadowMap.type = THREE.VSMShadowMap; // Produces artifacts, camera has to be close to objects and negative bias
         
         // camera views
-        this.createCameras();
+        this._createCameras();
    
         // lights
-        this.createLights();
+        this._createLights();
 
         // background
-        this.createBackgrounds();
+        this._createBackgrounds();
 
         // animation recorder
-        this.createRecorder();
+        this._createRecorder();
 
         // so the screen is not black while loading
-        this.changeCameraMode( false ); //moved here because it needs the backplane to exist
+        this.changeCameraMode( this.cameraRestricted ); //moved here because it needs the backplane to exist
         this.renderer.render( this.scene, this.cameras[this.camera] );        
         this.scriptApp.init(this.scene);
     
@@ -14026,65 +14632,94 @@ class Performs {
             }
         }
 
-        let modelToLoad = [PERFORMS.AVATARS_URL+'Eva_Low/Eva_Low.glb', PERFORMS.AVATARS_URL+'Eva_Low/Eva_Low.json', (new THREE.Quaternion()).setFromAxisAngle( new THREE.Vector3(1,0,0), 0 ), "EvaLow" ];
-        
+        let modelToLoad = {};//[PERFORMS.AVATARS_URL+'Eva_Low/Eva_Low.glb', PERFORMS.AVATARS_URL+'Eva_Low/Eva_Low.json', (new THREE.Quaternion()).setFromAxisAngle( new THREE.Vector3(1,0,0), 0 ), "EvaLow" ];
+        let defaultAvatar = options.avatar || window.localStorage.getItem("avatar") || "Eva";
         // Default avatar & config file
-        if(options.avatar) {
-            let avatar = options.avatar;
+        if(defaultAvatar) {
+            let avatar = defaultAvatar;
             const path = avatar.split(".");
-            let filename = path[path.length-2];
-            filename = filename.split("/");
-            filename = filename.pop();
-            
-            avatar += avatar.includes('models.readyplayer.me') ? '?pose=T&morphTargets=ARKit&lod=1' : '';
-
-            modelToLoad = [ avatar, options.config, new THREE.Quaternion(), filename];          
+            let filename = "";
+            if( path.length > 1 ) {
+                filename = path[path.length-2];
+                filename = filename.split("/");
+                filename = filename.pop();
+                
+                avatar += avatar.includes('models.readyplayer.me') ? '?pose=T&morphTargets=ARKit&lod=1' : '';
+                modelToLoad = [ avatar, options.config, new THREE.Quaternion(), null, filename];
+                defaultAvatar = filename;
+                this.avatars[defaultAvatar] = modelToLoad;
+            }
+            else if( path.length == 1 && this.avatars[path[0]] ) {
+                defaultAvatar = path[0];
+                modelToLoad = this.avatars[defaultAvatar];
+                modelToLoad.push(defaultAvatar);
+            }
+            else {
+                defaultAvatar = "Eva";
+                modelToLoad = this.avatars[defaultAvatar];
+                modelToLoad.push(defaultAvatar); 
+            }
         }
+        // else {
+        //     options.avatar = defaultAvatar;
+        // }
+
+        options.avatar = defaultAvatar;
 
         if(options.rotation) {
             let rotation = options.rotation;
             rotation = rotation.split(',');
-            modelToLoad[2].fromArray(rotation);
+            modelToLoad[2] = new Quaternion().fromArray(rotation);
         }
         
+        if( PERFORMS.GUI ) {
+            this.gui = new PERFORMS.GUI( this );
+        }
+        this._onLoading( "Loading avatar...");
         // Load default avatar
-        this.loadAvatar(modelToLoad[0], modelToLoad[1], modelToLoad[2], modelToLoad[3], () => {
-            this.changeAvatar( modelToLoad[3] );
-          
-            this.setConfiguration(options);
-            // Create the GUI only if the class exists or the showControls flag is true
-            if ( PERFORMS.GUI && this.showControls) {
-                this.gui = new PERFORMS.GUI( this ); 
-                if(!this.gui.avatarOptions[modelToLoad[3]]) {
-                    const name = modelToLoad[3];
-                    modelToLoad[3] = modelToLoad[0].includes('models.readyplayer.me') ? ("https://models.readyplayer.me/" + name + ".png?background=68,68,68") : PERFORMS.GUI.THUMBNAIL;
-                    this.gui.avatarOptions[name] = modelToLoad;
+        this.setConfiguration(options, ( err ) => {
+            // Create the GUI only if the class exists or the controlsActive flag is true
+            if ( this.gui ) {
+                if(!this.gui.avatarOptions[defaultAvatar]) {
+                    modelToLoad[3] = modelToLoad[0].includes('models.readyplayer.me') ? ("https://models.readyplayer.me/" + name + ".png?background=transparent") : PERFORMS.GUI.THUMBNAIL;
+                    this.gui.avatarOptions[defaultAvatar] = modelToLoad;
                     this.gui.refresh();
+                }
+                if( !this.controlsActive ) {
+                    this.gui.hideControls();
                 }
             }
             else {
                 window.document.body.appendChild(this.renderer.domElement);
             }
-
-            $('#loading').fadeOut(); //hide();
-            this.animate();
+            this._onLoadingEnded();
+            
+            this._animate();
             this.isAppReady = true;
                         
             if(this.pendingMessageReceived) {
-                this.onMessage( this.pendingMessageReceived );
+                this._onMessage( this.pendingMessageReceived );
                 this.pendingMessageReceived = null; // although onMessage is async, the variable this.pendingMessageReceived is not used. So it is safe to delete
             }
-        }, (err) => {
-            $('#loading').fadeOut();
-            alert("There was an error loading the avatar", "Avatar not loaded");
-        } );
-
+        });
+        
         // Create event listeners
-        window.addEventListener( "message", this.onMessage.bind(this) );
-        window.addEventListener( 'resize', this.onWindowResize.bind(this) );
+        window.addEventListener( "message", this._onMessage.bind(this) );
+        window.addEventListener( 'resize', this._onWindowResize.bind(this) );
+    }
+
+    appendCanvasTo( element ) {
+        if( !element ) {
+            return;
+        }
+
+        this.renderer.domElement.remove();
+        element.appendChild(this.renderer.domElement);
+        
+        this._onWindowResize();
     }
     
-    newCameraFrom({azimuthAngle = 0, polarAngle = 0, depth = 0, controlsEnabled = false}) {
+    _newCameraFrom({azimuthAngle = 0, polarAngle = 0, depth = 0, controlsEnabled = false}) {
         let camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.01, 1000);
         camera.record = true;
         let controls = new OrbitControls( camera, this.renderer.domElement );
@@ -14112,15 +14747,15 @@ class Performs {
         return {camera: camera, controls: controls};
     }
 
-    createCameras() {
-        this.newCameraFrom({azimuthAngle: 0, controlsEnabled: true}); // init main Camera (0)
-        this.newCameraFrom({azimuthAngle: 25});
-        this.newCameraFrom({azimuthAngle: -25});
+    _createCameras() {
+        this._newCameraFrom({azimuthAngle: 0, controlsEnabled: true}); // init main Camera (0)
+        this._newCameraFrom({azimuthAngle: 25});
+        this._newCameraFrom({azimuthAngle: -25});
     
         this.camera = 0;
     }
 
-    createLights() {
+    _createLights() {
         const hemiLight = new THREE.HemisphereLight( 0xffffff, 0xffffff, 0.5 );
         this.scene.add( hemiLight );
 
@@ -14156,7 +14791,7 @@ class Performs {
         dirLight.target = dirLightTarget;
     }
 
-    createBackgrounds() {
+    _createBackgrounds() {
         // Create transparent ground for Open space
         const ground = this.ground = new THREE.Mesh( new THREE.PlaneGeometry(20,20), new THREE.MeshStandardMaterial( { color: this.sceneColor, opacity: 0.1, transparent:true, depthWrite: true, roughness: 1, metalness: 0 } ) );
         ground.name = 'Ground';
@@ -14249,7 +14884,7 @@ class Performs {
         this.setBackground(this.background);
     }
 
-    createRecorder() {
+    _createRecorder() {
         
         this.animationRecorder = new AnimationRecorder(this.cameras.length, this);
         this.animationRecorder.onStartCapture = (v) => {
@@ -14270,7 +14905,9 @@ class Performs {
         }
         this.loaderGLB.load( modelFilePath, async (glb) => {
             let model = glb.scene;
-            model.quaternion.premultiply( modelRotation );
+            if( modelRotation && modelRotation.constructor == THREE.Quaternion ) {
+                model.quaternion.premultiply( modelRotation );
+            }
             model.castShadow = true;
             let skeleton = null;
             const morphTargets = {};
@@ -14350,7 +14987,7 @@ class Performs {
             model.name = avatarName;
 
             this.loadedCharacters[avatarName] ={
-                model, skeleton, config: null, morphTargets
+                model, skeleton, config: null, morphTargets, path: modelFilePath
             };
 
             // Load config file and set automatically the Script mode
@@ -14398,12 +15035,12 @@ class Performs {
         });
     }
 
-    animate() {
+    _animate() {
 
-        requestAnimationFrame( this.animate.bind(this) );
+        requestAnimationFrame( this._animate.bind(this) );
 
         // don't let the camera to be under the ground 
-        if(this.cameraMode) {
+        if(!this.cameraRestricted) {
             let centerPosition = this.controls[this.camera].target.clone();
             centerPosition.y = 0;
             let groundPosition = this.cameras[this.camera].position.clone();
@@ -14418,7 +15055,6 @@ class Performs {
 
         this.controls[this.camera].update(); // needed because of this.controls.enableDamping = true
         let delta = this.clock.getDelta();         
-        // delta *= this.speed;
         this.elapsedTime += delta;
         
         switch( this.mode ){
@@ -14436,7 +15072,7 @@ class Performs {
 
         this.cameras[this.camera].layers.enable(0);
         this.cameras[this.camera].layers.enable(1);
-        if(this.keyframeApp.showTrajectories) {
+        if(this.keyframeApp.trajectoriesActive) {
             this.cameras[this.camera].layers.enable(2);
         }
         else {
@@ -14446,13 +15082,13 @@ class Performs {
     }
 
     // Force feet to touch the ground
-    precomputeFeetOffset(avatarName) {
+    _precomputeFeetOffset(avatarName) {
         const character = this.loadedCharacters[avatarName];
         const map = computeAutoBoneMap( character.skeleton );
         character.LToeName = character.model.getObjectByName(map.nameMap.LFoot).children[0].name;
         character.RToeName = character.model.getObjectByName(map.nameMap.RFoot).children[0].name;
         const LtoePos = character.model.getObjectByName(map.nameMap.LFoot).children[0].getWorldPosition(new THREE.Vector3());
-        const RtoePos = character.model.getObjectByName(map.nameMap.RFoot).children[0].getWorldPosition(new THREE.Vector3);
+        const RtoePos = character.model.getObjectByName(map.nameMap.RFoot).children[0].getWorldPosition(new THREE.Vector3());
       
         // Cast a ray downwards from the left toe's position
         let dir = new THREE.Vector3(0, 1, 0);
@@ -14471,7 +15107,7 @@ class Performs {
         return diff;
     }
 
-    onMessage(event) {
+    _onMessage(event) {
         if ( !this.isAppReady ) { 
             this.pendingMessageReceived = event; 
             return; 
@@ -14499,7 +15135,10 @@ class Performs {
             return;
         }
 
-        if ( Array.isArray(data) ){
+        if ( data.type == "bml" || data.type == "sigml" || !data.type && Array.isArray(data) ){
+            if( data.data ) {
+                data = [{data:JSON.parse(data.data).behaviours, type:data.type}];
+            }
             this.scriptApp.onMessage(data, (processedData) => {
                 
                 this.changeMode(PERFORMS.Modes.SCRIPT);
@@ -14512,7 +15151,7 @@ class Performs {
                 }
                 
                 if(this.autoplay) {
-                    this.scriptApp.replay();
+                    this.changePlayState();
                     if(this.videoBackground) {
                         this.videoBackground.play();
                     }
@@ -14529,7 +15168,7 @@ class Performs {
                     this.gui.refresh();
                 }
                 if(this.autoplay) {
-                    this.keyframeApp.changePlayState(true);
+                    this.changePlayState(true);
                 }
             });
         }
@@ -14538,30 +15177,48 @@ class Performs {
         }
     }
     
-    onWindowResize() {
+    _onWindowResize( ) {
+        const parent = this.renderer.domElement.parentElement;
+
+        let width = window.innerWidth;
+        let height = window.innerHeight;
+
+        if( parent ) {
+            width = parent.clientWidth;
+            height = parent.clientHeight;
+    
+            const paddingTop = parent.style.paddingTop ? Number(parent.style.paddingTop.replace("px", "")) : 0;
+            const paddingBottom = parent.style.paddingBottom ? Number(parent.style.paddingBottom.replace("px", "")) : 0;
+            const paddingLeft = parent.style.paddingLeft ? Number(parent.style.paddingLeft.replace("px", "")) : 0;
+            const paddingRight = parent.style.paddingRight ? Number(parent.style.paddingRight.replace("px", "")) : 0;
+        
+            width-= ( paddingLeft + paddingRight );
+            height-= ( paddingTop + paddingBottom );
+        }
+
         for (let i = 0; i < this.cameras.length; i++) {
-            this.cameras[i].aspect = window.innerWidth / window.innerHeight;
+            this.cameras[i].aspect = width / height;
             this.cameras[i].updateProjectionMatrix();
         }
-        this.renderer.setSize( window.innerWidth, window.innerHeight );
+        this.renderer.setSize( width, height );
     }
         
     changeAvatar( avatarName ) {
         if ( this.currentCharacter ) {
             this.scene.remove( this.currentCharacter.model ); // delete current model from scene
         }
-
+        
         // Update the current character and add the model to the scene
         this.currentCharacter = this.loadedCharacters[avatarName];
         this.scene.add( this.currentCharacter.model ); 
         
         // Compute the distance between the feet bones and the mesh for force to touch the ground
-        const diffToGround = this.precomputeFeetOffset(avatarName);
+        const diffToGround = this._precomputeFeetOffset(avatarName);
         this.loadedCharacters[avatarName].diffToGround = diffToGround;
         this.loadedCharacters[avatarName].position = this.currentCharacter.model.position.clone();
 
         // Set the avatars to each app mode
-        this.keyframeApp.showTrajectories = this.keyframeApp.showTrajectories && (this.mode == PERFORMS.Modes.KEYFRAME);
+        this.keyframeApp.trajectoriesActive = this.keyframeApp.trajectoriesActive && (this.mode == PERFORMS.Modes.KEYFRAME);
         this.scriptApp.onChangeAvatar(avatarName);
         this.keyframeApp.onChangeAvatar(avatarName);
           
@@ -14588,18 +15245,20 @@ class Performs {
             }
         });
         
+        // window.localStorage.setItem("avatar", this.avatars[avatarName] ? avatarName : this.loadedCharacters[avatarName].path);
+
         if ( this.gui ){ 
             this.gui.refresh(); 
         }
     }
 
     toggleCameraMode() { 
-        this.changeCameraMode( !this.cameraMode ); 
+        this.changeCameraMode( !this.cameraRestricted ); 
     }
 
-    changeCameraMode( mode ) {
+    changeCameraMode( restrictView ) {
 
-        if ( mode ) { // Free camera controls
+        if ( !restrictView ) { // Free camera controls
             this.controls[this.camera].enablePan = true;
             this.controls[this.camera].minDistance = 0.1;
             this.controls[this.camera].maxDistance = 10;
@@ -14621,7 +15280,8 @@ class Performs {
             }
         }
         this.controls[this.camera].update();
-        this.cameraMode = mode; 
+        this.cameraRestricted = restrictView;
+        // window.localStorage.setItem("restrictView", restrictView);
     }
 
     openAtelier(name, model, config, fromFile = true, rotation = 0) {
@@ -14708,6 +15368,25 @@ class Performs {
                     options
                 );
                 break;
+        }
+    }
+
+    _onLoading( text ) {
+
+        if(this.onLoading) {
+            this.onLoading( text);
+        }
+        else if( this.gui ) {
+            this.gui.makeLoading(text);
+        }
+    }
+
+    _onLoadingEnded( ) {
+        if(this.onLoadingEnded) {
+            this.onLoadingEnded();
+        }
+        else if( this.gui ) {
+            this.gui.hideLoading();
         }
     }
 }

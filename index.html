@@ -43,6 +43,108 @@
                 }
             }
 
+            .hand{
+              height:170px;
+              position:relative;
+              margin:60px auto;
+              display:block;
+              margin-left:45%;
+            }
+
+            .finger{
+              width:40px;
+              height:110px;
+              background:#fff;
+              float:left;
+              margin-right:3px;
+              border-radius:10px 10px 15px 15px;
+              position:absolute;  
+            }
+
+            .finger:after{
+              content: "";
+              width:30px;
+              height:30px;
+              background:#4492F4;
+              bottom:10px;
+              left:5px;
+              position:absolute;
+              border-radius:30px 30px 20px 20px;
+            }
+
+            .finger:before{
+              content: "";
+              width:20px;
+              height:5px;
+              background:#4492F4;
+              top:10px;
+              left:10px;
+              position:absolute;
+            }
+            .hand .finger:nth-child(1){
+                  width: 40px;
+                height: 100px;
+              bottom:0;
+              left:0;
+              animation: shake 0.7s ease infinite ;
+              animation-delay: 0.0s;
+            }
+            .hand .finger:nth-child(2){
+              width:40px;
+              height:135px;
+              bottom:0;
+              left:45px;
+              animation: shake 0.7s ease infinite ;
+              animation-delay: 0.1s;
+            }
+
+            .hand .finger:nth-child(3){
+              width:40px;
+              height:150px;
+              bottom:0px;
+              left:90px;
+              animation: shake 0.7s ease infinite;
+              animation-delay: 0.2s;
+            }
+
+            .hand .finger:nth-child(4){
+              width:40px;
+              height:135px;
+              bottom:0;
+              left:135px;
+              animation: shake 0.7s ease infinite ;
+              animation-delay: 0.3s;
+            }
+
+
+            .thumb{
+              position:relative;
+              background:#fff;
+              width:60px;
+              height:50px;
+              float:left;
+              left:180px;
+              bottom:0;
+              margin-top:50px;
+              border-radius: 0px 30px 90px 0px;
+              animation: shake 0.7s ease infinite ;
+              animation-delay: 0.4s;
+            }
+            
+            @keyframes shake {
+              0% {
+              bottom:0;
+              }
+              
+              50% {
+              bottom:10%;
+              }
+              
+              100% {
+              bottom:0px;
+              }
+              
+            }
             .text {
                 color: #949494;
                 margin: 30px auto;
@@ -79,8 +181,17 @@
     <body>
         <div id="loading" class="" style="display:flex; flex-direction:column; background-color:#212121; position: absolute; width: 100%; height: 100%; 
                 display: flex; justify-content: center; align-items: center; z-index: 100; color: white; font-size: larger;">
-                <div class="triangle1"></div>
-                <div class="triangle2"></div>
+                <!-- <div class="triangle1"></div>
+                <div class="triangle2"></div> -->
+                <!-- Animation created by Rakesh Nayak("https://codepen.io/rakeshnayak/")-->
+                <div class="hand">
+                    <div class="finger"></div>
+                    <div class="finger"></div>
+                    <div class="finger"></div>
+                    <div class="finger"></div>
+                    <div class="thumb"></div>
+                    <div class="clear"></div>
+                </div>
 			    <p id="text" class="text">Loading avatar, please wait</p>
     
 		</div>

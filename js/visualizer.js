@@ -700,7 +700,7 @@ class Visualizer {
             const landmarksLeftHand = worldLandmarksArray[i].LWLM;
     
             this.computeSpine( skeleton, landmarksBody, bindQuats, deltaTime );
-            this.computeQuatHead( skeleton, landmarksBody, bindQuats, deltaTime );
+            // this.computeQuatHead( skeleton, landmarksBody, bindQuats, deltaTime );
     
             // right arm-hands
             this.computeQuatArm( skeleton, landmarksBody, false, deltaTime );
@@ -745,7 +745,9 @@ class Visualizer {
             mesh.morphTargetInfluences.fill(0);
             meshes.push(mesh);
         }
+        
         const boneHead = this.skeleton.bones[ 5 ]; // head
+        const boneNeck = this.skeleton.bones[ 4 ]; // neck
         const actionUnits = {};
         for( let au in Visualizer.mediapipeMap ) {
             let bs = Visualizer.mediapipeMap[au];
@@ -778,11 +780,151 @@ class Visualizer {
         }
         if( blends["Head"] ) {
             // boneHead.quaternion.copy( new THREE.Quaternion().setFromEuler( blends[au]) )
-            const q = new THREE.Quaternion().setFromEuler( blends["Head"]);
-            const pQ = boneHead.parent.quaternion.clone();
+            const euler = blends["Head"];
+            euler.x*=0.5;
+            euler.y*=0.5;
+            euler.z*=0.5;
+            let q = new THREE.Quaternion().setFromEuler( euler );
+            let pQ = boneNeck.parent.quaternion.clone();
+            q.multiply( pQ.invert() ).normalize();
+            boneNeck.quaternion.copy( q );
+            
+            q = new THREE.Quaternion().setFromEuler( euler );
+            pQ = boneHead.parent.quaternion.clone();
             q.multiply( pQ.invert() ).normalize();
             boneHead.quaternion.copy( q );
         }
+    }
+
+    createFaceAnimationFromBlendshapes(morphTargets, blendshapesArray) {
+
+        let tracks = {};
+        let times = new Float32Array( blendshapesArray.length );
+        let timeAcc = 0;
+        const values = new Float32Array( blendshapesArray.length );
+        values.fill(0);
+        const qvalues = new Float32Array( blendshapesArray.length*4 );
+        qvalues.fill(0);
+        const meshes = [];
+        for( let object in morphTargets ) {
+            const mesh = this.model.getObjectByName(object);
+            mesh.morphTargetInfluences.fill(0);
+            meshes.push(mesh);
+            for(let bs in mesh.morphTargetDictionary) {
+                tracks[`${mesh.name}.morphTargetInfluences[${bs}]`] = new THREE.NumberKeyframeTrack(`${mesh.name}.morphTargetInfluences[${bs}]`, times, [...values]);
+            }
+        }
+        const boneNeck = this.skeleton.bones[ 4 ]; // neck
+        const boneHead = this.skeleton.bones[ 5 ]; // head
+        const boneLeftEye = this.skeleton.bones[ 7 ]; // left eye
+        const boneRightEye = this.skeleton.bones[ 8 ]; // right eye
+
+        for( let t = 0; t < blendshapesArray.length; t++ ) {
+            const deltaTime = blendshapesArray[t].dt < 0.00001 ? 0.00001 : blendshapesArray[t].dt/1000; // necessary for smoothing
+            const blends = blendshapesArray[t];
+            const actionUnits = {};
+            for( let au in Visualizer.mediapipeMap ) {
+                let bs = Visualizer.mediapipeMap[au];
+                let morphTarget = this.characterMap[au];
+                if( !bs || !bs.length || !morphTarget || !morphTarget.length ) { 
+                    continue;
+                }
+
+                for(let i = 0; i < bs.length; i++) {
+                    const bsName = bs[i][0];
+                    if(!actionUnits[au]) {
+                        actionUnits[au] = 0;
+                    }
+                    if(!blends[bsName]) {
+                        blends[bsName] = 0;
+                    }
+                    actionUnits[au]= blends[bsName] * bs[i][1];
+                    for( let m = 0; m < meshes.length; m++ ) {
+                        const mesh = meshes[m];
+                        for(let mt = 0; mt < morphTarget.length; mt++) {
+                            const idx = this.morphTargets[mesh.name][morphTarget[mt][0]];
+                            if( idx == null) {
+                                continue;
+                            }
+                            tracks[`${mesh.name}.morphTargetInfluences[${morphTarget[mt][0]}]`].values[t]+=actionUnits[au] * morphTarget[mt][1];
+                                //mesh.morphTargetInfluences[idx]+= actionUnits[au] * morphTarget[mt][1];
+                        }
+                    }
+                }
+                
+                // if(blends["LeftEyeYaw"] == null) {
+                //     blends["LeftEyeYaw"] = (blends["EyeLookOutLeft"] - blends["EyeLookInLeft"]) * 0.5 || 0;
+                //     blends["RightEyeYaw"] = - (blends["EyeLookOutRight"] - blends["EyeLookInRight"]) * 0.5 || 0;
+                //     blends["LeftEyePitch"] = (blends["EyeLookDownLeft"] - blends["EyeLookUpLeft"]) * 0.5 || 0;
+                //     blends["RightEyePitch"] = (blends["EyeLookDownRight"] - blends["EyeLookUpRight"]) * 0.5 || 0;
+                // }
+                // if(!blends["LeftEye"] && blends["LeftEyePitch"] != undefined && blends["LeftEyeYaw"] != undefined) {
+                //     blends["LeftEye"] = new THREE.Euler( blends["LeftEyePitch"], blends["LeftEyeYaw"], 0, 'XYZ' );
+                //     if(!tracks[`${boneLeftEye.name}.quaternion`]) {
+                //         tracks[`${boneLeftEye.name}.quaternion`] = new THREE.QuaternionKeyframeTrack(`${boneLeftEye.name}.quaternion`, times, [...qvalues]);
+                //     }
+
+                //     const q = new THREE.Quaternion().setFromEuler( blends["LeftEye"]);
+                //     const pQ = boneLeftEye.parent.quaternion.clone();
+                //     q.multiply( pQ.invert() ).normalize();
+                    
+                //     tracks[`${boneLeftEye.name}.quaternion`].values[t*4]= q.x;
+                //     tracks[`${boneLeftEye.name}.quaternion`].values[t*4+1] = q.y;
+                //     tracks[`${boneLeftEye.name}.quaternion`].values[t*4+2] = q.z;
+                //     tracks[`${boneLeftEye.name}.quaternion`].values[t*4+3] = q.w;
+                // }
+                // if(!blends["RightEye"] && blends["RightEyePitch"] != undefined && blends["RightEyeYaw"] != undefined) {
+                //     blends["RightEye"] = new THREE.Euler( blends["RightEyePitch"], blends["RightEyeYaw"], 0, 'XYZ' );
+                //     blends["LeftEye"] = new THREE.Euler( blends["LeftEyePitch"], blends["LeftEyeYaw"], 0, 'XYZ' );
+                //     if(!tracks[`${boneRightEye.name}.quaternion`]) {
+                //         tracks[`${boneRightEye.name}.quaternion`] = new THREE.QuaternionKeyframeTrack(`${boneRightEye.name}.quaternion`, times, [...qvalues]);
+                //     }
+                //     const q = new THREE.Quaternion().setFromEuler( blends["RightEye"]);
+                //     const pQ = boneRightEye.parent.quaternion.clone();
+                //     q.multiply( pQ.invert() ).normalize();
+                    
+                //     tracks[`${boneRightEye.name}.quaternion`].values[t*4]= q.x;
+                //     tracks[`${boneRightEye.name}.quaternion`].values[t*4+1] = q.y;
+                //     tracks[`${boneRightEye.name}.quaternion`].values[t*4+2] = q.z;
+                //     tracks[`${boneRightEye.name}.quaternion`].values[t*4+3] = q.w;
+                // }
+                if(!blends["Head"] && blends["HeadPitch"] != undefined && blends["HeadYaw"] != undefined && blends["HeadRoll"] != undefined) {
+                    blends["Head"] =  new THREE.Euler( blends["HeadPitch"]*0.5, blends["HeadYaw"]*0.5, blends["HeadRoll"]*0.5 , 'XYZ' );
+                    blends["Neck"] =  new THREE.Euler( blends["HeadPitch"]*0.5, blends["HeadYaw"]*0.5, blends["HeadRoll"]*0.5 , 'XYZ' );
+                
+                    // boneHead.quaternion.copy( new THREE.Quaternion().setFromEuler( blends[au]) )
+                   
+                    let q = new THREE.Quaternion().setFromEuler( blends["Neck"]);
+                    let pQ = boneNeck.parent.quaternion.clone();
+                    q.multiply( pQ.invert() ).normalize();
+                    if(!tracks[`${boneNeck.name}.quaternion`]) {
+                        tracks[`${boneNeck.name}.quaternion`] = new THREE.QuaternionKeyframeTrack(`${boneNeck.name}.quaternion`, times, [...qvalues]);
+                    }
+                    tracks[`${boneNeck.name}.quaternion`].values[t*4]= q.x;
+                    tracks[`${boneNeck.name}.quaternion`].values[t*4+1] = q.y;
+                    tracks[`${boneNeck.name}.quaternion`].values[t*4+2] = q.z;
+                    tracks[`${boneNeck.name}.quaternion`].values[t*4+3] = q.w;
+
+                    pQ = q.clone();//boneHead.parent.quaternion.clone();
+                    q = new THREE.Quaternion().setFromEuler( blends["Head"]);
+                    q.multiply( pQ.invert() ).normalize();
+                    if(!tracks[`${boneHead.name}.quaternion`]) {
+                        tracks[`${boneHead.name}.quaternion`] = new THREE.QuaternionKeyframeTrack(`${boneHead.name}.quaternion`, times, [...qvalues]);
+                    }
+                    tracks[`${boneHead.name}.quaternion`].values[t*4]= q.x;
+                    tracks[`${boneHead.name}.quaternion`].values[t*4+1] = q.y;
+                    tracks[`${boneHead.name}.quaternion`].values[t*4+2] = q.z;
+                    tracks[`${boneHead.name}.quaternion`].values[t*4+3] = q.w;
+
+                }
+                
+            }
+            // store timing
+            if (t != 0){ timeAcc += deltaTime; }
+            times[t] = timeAcc;
+        }
+
+        return new THREE.AnimationClip( "faceAnimation", -1, Object.values(tracks) );
     }
 
     applyHandSmoothingWithAnchor(handHistory, shoulderHistory, smoothFn) {
@@ -1154,7 +1296,7 @@ class Visualizer {
                 blends["RightEye"] = new THREE.Euler( blends["RightEyePitch"], blends["RightEyeYaw"], 0, 'XYZ' );
             }
             if(!blends["Head"] && blends["HeadPitch"] != undefined && blends["HeadYaw"] != undefined && blends["HeadRoll"] != undefined) {
-                blends["Head"] =  new THREE.Euler( 2*Math.PI - blends["HeadPitch"]-0.2, 2*Math.PI - blends["HeadYaw"], 2*Math.PI - blends["HeadRoll"] , 'XYZ' );
+                blends["Head"] =  new THREE.Euler(blends["HeadPitch"],blends["HeadYaw"],blends["HeadRoll"] , 'XYZ' );
             }
 
             this.faceBlendshapes = detections.face = blends;          
