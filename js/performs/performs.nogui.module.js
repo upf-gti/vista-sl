@@ -111,6 +111,7 @@ class AnimationRecorder {
             }
             if (this.isRecording) { 
                 this.stopCapture();
+                this.remainingAnimations = 1;
             }
             else { this.startCapture("BML"); }
         }
@@ -12204,10 +12205,21 @@ class ScriptApp {
     }
 }
 
+// Shared arrow geometry
+const SHARED_CONE_GEO = new THREE.ConeGeometry(1, 1, 3).rotateX(Math.PI / 2).translate(0, 0, -0.5);
+
 class TrajectoriesHelper {
     constructor( object, mixer ) {
         this.mixer = mixer;        
         this.object = object;
+
+        // Temporal objects to avoid Garbage Collection
+        this._tmpMat4 = new THREE.Matrix4();
+        this._tmpPos = new THREE.Vector3();
+        this._tmpLastPos = new THREE.Vector3();
+        this._tmpQuat1 = new THREE.Quaternion();
+        this._tmpQuat2 = new THREE.Quaternion();
+        this._tmpColor = new THREE.Color();
 
         this.trajectories = {
             "LeftHand": new THREE.Group( { name: "LeftHand", thickness: 8 }),
@@ -12224,24 +12236,25 @@ class TrajectoriesHelper {
             "RightHandPinky4": new THREE.Group( { name: "RightHandPinky4", thickness: 6, color: new THREE.Color("#C3E991") } ),
         };
 
+        const colorMap = {
+            "Thumb": "#51A3A3",
+            "Index": "#75485E",
+            "Middle": "#CB904D",
+            "Ring": "#DFCC74",
+            "Pinky": "#C3E991"
+        };
+
         for( const t in this.trajectories) {
             this.trajectories[t].thickness = 6;
-            if(t.includes("Thumb")) {
-                this.trajectories[t].color = new THREE.Color("#51A3A3");//"#DBC2CF");
+            let matched = false;
+            for(const key in colorMap) {
+                if(t.includes(key)) {
+                    this.trajectories[t].color = new THREE.Color(colorMap[key]);
+                    matched = true;
+                    break;
+                }
             }
-            else if(t.includes("Index")) {
-                this.trajectories[t].color = new THREE.Color("#75485E");//"#9FA2B2");
-            }
-            else if(t.includes("Middle")) {
-                this.trajectories[t].color = new THREE.Color("#CB904D");//"#3C7A89");
-            }
-            else if(t.includes("Ring")) {
-                this.trajectories[t].color = new THREE.Color("#DFCC74");//"#2E4756");
-            }
-            else if(t.includes("Pinky")) {
-                this.trajectories[t].color = new THREE.Color("#C3E991");//"#16262E");
-            }
-            else {
+            if(!matched) {
                 this.trajectories[t].thickness = 8;
             }
             this.trajectories[t].layers.set(2);
@@ -12249,131 +12262,296 @@ class TrajectoriesHelper {
         this.trajectoryStart = 0;
         this.trajectoryEnd = 100;
     }
+    
+    buildTrajectories( trajectoriesNames, times, data = {}, isRecompute = false) {
+        const mixer = data.mixer || this.mixer;
+        const startFrame = data.startFrame || 0;
+        const endFrame = data.endFrame || times.length - 1;
+        const startTime = data.startTime || times[startFrame];
+        const endTime = data.endTime || times[endFrame];
+        const originalTime = data.currentTime || mixer.time;
+
+        let totalFramesLoop = 0;
         
-    computeTrajectories( animation ) {
-        let boneName = null;
+        const trajectoryData = {};
+        
+        trajectoriesNames.forEach( name => {
+            
+            const trajectory = this.trajectories[name];
+            if( !trajectory ) {
+                return;
+            }
+  
+            const bone = this.object.getObjectByName(trajectory.name);
+            const isHand = name === "LeftHand" || name === "RightHand";
+            
+            let rootFinger = trajectory.rootFinger || null;
+            if (!isHand && bone && !rootFinger) {
+                let current = bone;
+                let n = current.name.replace("mixamorig", "").replaceAll("_", "").replaceAll(":", "");
+                while (current && !n.includes("1")) {
+                    current = current.parent;
+                    if (current) n = current.name.replace("mixamorig", "").replaceAll("_", "").replaceAll(":", "");
+                }
+                rootFinger = current;
+                trajectory.rootFinger = rootFinger;
+            }
 
-        this.dispose(); // remove any memory held by Threejs
+            // Add trajectories to the scene objects
+            if (rootFinger && !trajectory.parent) {
+                rootFinger.add(trajectory);
+            }
+            else if (isHand && !trajectory.parent) {
+                this.object.add(trajectory);
+            }
 
-        for(let i = 0; i < animation.mixerBodyAnimation.tracks.length; i++) {
-            const track = animation.mixerBodyAnimation.tracks[i];
-            const trackName = track.name;
-            for(let trajectory in this.trajectories) {
-
-                if(trackName.includes(trajectory+".") || trackName.includes(trajectory.replace("4","EndSite")+".")) {
-                    boneName = trackName.replace(".quaternion", "");
-                    if(boneName) {
-                        this.trajectories[trajectory].name = boneName;
-                        const isHand = trajectory == "LeftHand" || trajectory == "RightHand";
-                        const root = isHand ? this.object : this.object.getObjectByName(boneName.replace("4","1").replace("EndSite","1"));
-                        // Add hand trajectories to the model object
-                        // or Add finger trajectories to the first joint of the finger
-
-                        root.add(this.trajectories[trajectory]);
-                        break;
+            const arrowMap = {};
+            if (isRecompute) {
+                const childrenCopy = [...trajectory.children];
+                for (let i = 0; i < childrenCopy.length; i++) {
+                    if (childrenCopy[i].name !== "line") {
+                        trajectory.remove(childrenCopy[i]);
+                        // arrowMap[childrenCopy[i].name] = childrenCopy[i];
                     }
                 }
             }
+
+            trajectoryData[name] = {
+                bone: bone,
+                rootFinger: rootFinger,
+                isHand: isHand,
+                positions: isRecompute ? trajectory.positions : [],
+                colors: isRecompute ? trajectory.colors : [],
+                arrowMap: arrowMap,
+                p3: bone?.parent?.parent?.parent,
+                p2: bone?.parent?.parent,
+                lastPos: isRecompute 
+                    ? this._tmpLastPos.set(trajectory.positions[startFrame * 3 - 3] || 0, trajectory.positions[startFrame * 3 - 2] || 0, trajectory.positions[startFrame * 3 - 1] || 0)
+                    : new THREE.Vector3()
+            };
+            totalFramesLoop = isRecompute ? (trajectory.positions.length / 3) : (times.length - 1);
+        });
+
+        if (isRecompute) {
+            mixer.setTime(0);
+            mixer.update(0);
         }
-        const mixer = this.mixer;//this.performs.currentCharacter.mixer;
-        const track = animation.mixerBodyAnimation.tracks[0];
-        this.trajectoryEnd = track.times.length;
 
-        const findFirstFingerJoint = (bone) => {
-            let name = bone.name.replace("mixamorig","").replaceAll("_","").replaceAll(":","");
-            while (bone && !name.includes("1")) {
-                bone = bone.parent;
-                name = bone.name.replace("mixamorig","").replaceAll("_","").replaceAll(":","");
-            }
-            return bone;
-        };
+        let gradIdx = -1;
+        let maxGradient = [1.0001, 0];
+        let g0 = [0, 0];
+        let g1 = data.gradient ? data.gradient[0] : 0;
 
-        this.object.updateMatrixWorld(true);
+        // Processing Phase
+        const mat4 = this._tmpMat4;
+        const pos = this._tmpPos;
+        new THREE.Quaternion();
+        new THREE.Quaternion();
 
-        for(let trajectory in this.trajectories) {
-            const boneName = this.trajectories[trajectory].name;
-            const positions = [];
-            const colors = [];
-            const bone = this.object.getObjectByName(boneName);
+        for (let t = 0; t < totalFramesLoop; t++) {
+            const time = times[t];
             
-            const isHand = trajectory == "LeftHand" || trajectory == "RightHand";
-            const rootFinger = isHand ? null : findFirstFingerJoint(bone); // For fingers trajectories: Get fingertip position relative to the first joint of the finger
+            // Update mixer and force a full skeleton matrix update
+            mixer.setTime(time / mixer.timeScale);
 
-            const pos = new THREE.Vector3();
-            const lastPos = new THREE.Vector3();
-            const mat4 = new THREE.Matrix4();
+            this.object.updateWorldMatrix(true, true);
 
-            for(let t = 0; t < track.times.length; t++) {
+            trajectoriesNames.forEach( name => {
+                const trajectory = trajectoryData[name];
+                if (!trajectory || !trajectory.bone) {
+                    return;
+                }
+                
+                trajectory.bone.updateWorldMatrix(true, false);
 
-                mixer.setTime(track.times[t]);
-                bone.updateWorldMatrix( true, false );
-
-                if(!isHand) { // For fingers trajectories: Get fingertip position relative to the first joint of the finger
-                    if (!bone || !rootFinger) break; // continue;
-
-                    // matrix from root to tip
-                    mat4.copy( rootFinger.matrixWorld )
-                        .invert()
-                        .multiply( bone.matrixWorld );
+                // Convert world to local positions
+                if (trajectory.isHand) {
+                    pos.setFromMatrixPosition(trajectory.bone.matrixWorld);
+                }
+                else {
+                    if (!trajectory.rootFinger) return;
+                    mat4.copy(trajectory.rootFinger.matrixWorld).invert().multiply(trajectory.bone.matrixWorld);
                     pos.setFromMatrixPosition(mat4);
                 }
-                else { // For hand trajectory : Get global position of the wrist
-                    pos.setFromMatrixPosition( bone.matrixWorld );
+
+                // Save positions
+                if (isRecompute) {
+                    const t3 = t * 3;
+                    this.trajectories[name].positions[t3] = pos.x;
+                    this.trajectories[name].positions[t3 + 1] = pos.y;
+                    this.trajectories[name].positions[t3 + 2] = pos.z;
                 }
-                
-                positions.push(pos.x, pos.y, pos.z);
-                
-                // there will be, at most, track.times.length-1 arrows. Building arrows for t-1
-                if ( t > 0 ){
-                    const c = this.trajectories[trajectory].color || new THREE.Color(`hsl(${180*Math.sin( track.times[t]/Math.PI)}, 100%, 50%)`);
-                    colors.push(c .r, c .g, c .b, 0.8);
-                    colors.push(c .r, c .g, c .b, 0.8);
-                    // colors.push(c .r, c .g, c .b);
+                else {
+                    trajectory.positions.push(pos.x, pos.y, pos.z);
+                }
+
+                // Compute opacity given a gradient
+                let alpha = 0.8;
+                if (data.gradient) {
+                    let value = (times[t] - startTime) / (endTime - startTime); 
+                    while (value > g1[0]) {
+                        g0 = g1;
+                        g1 = data.gradient[++gradIdx];
+                        if (!g1) { g1 = maxGradient; break; }
+                    }
+                    value = (value - g0[0]) / (g1[0] - g0[0]);
+                    value = g0[1] * (1 - value) + g1[1] * value;
+                    alpha = value;
+                }
+                const opacity = Math.max(0, Math.min(1, alpha));
+
+                let c = this.trajectories[name].color;
+                if (!c) {
+                    c = this._tmpColor.set(`hsl(${180 * Math.sin(time / Math.PI)}, 100%, 50%)`);
+                }
+
+                if (isRecompute) {
+                    const t8 = t * 8;
+                    this.trajectories[name].colors[t8] = c.r;
+                    this.trajectories[name].colors[t8 + 1] = c.g;
+                    this.trajectories[name].colors[t8 + 2] = c.b;
+                    this.trajectories[name].colors[t8 + 3] = opacity;
+                    this.trajectories[name].colors[t8 + 4] = c.r;
+                    this.trajectories[name].colors[t8 + 5] = c.g;
+                    this.trajectories[name].colors[t8 + 6] = c.b;
+                    this.trajectories[name].colors[t8 + 7] = opacity;
+
+                    if (t > 0) {
+                        // Reuse arrows intances
+                        let arrow = trajectory.arrowMap[t - 1];
+                        if (arrow) {
+                            const ix = trajectory.lastPos.x, iy = trajectory.lastPos.y, iz = trajectory.lastPos.z;
+                            const fx = pos.x, fy = pos.y, fz = pos.z;
+                            const length = Math.sqrt( (ix-fx)**2 + (iy-fy)**2 + (iz-fz)**2 );
+                            arrow.position.set(trajectory.lastPos.x, trajectory.lastPos.y, trajectory.lastPos.z);
+                            arrow.lookAt(pos.x, pos.y, pos.z);
+                            arrow.visible = opacity > 0;
+                            arrow.children[0].material.opacity = opacity;
+                            arrow.children[0].position.set(0, 0, length);
+                        }
+                        else {
+                            arrow = customArrow(pos.x, pos.y, pos.z, trajectory.lastPos.x, trajectory.lastPos.y, trajectory.lastPos.z, this.trajectories[name].thickness * 0.0002, c);
+                            if (arrow) {
+                                arrow.name = t - 1;
+                                arrow.layers.set(2);
+                                arrow.visible = opacity > 0;
+                                arrow.children[0].material.opacity = opacity;
+                                this.trajectories[name].add(arrow);
+                            }
+                        }
+                    }
+                }
+                else {
+                    trajectory.colors.push(c.r, c.g, c.b, opacity);
+                    trajectory.colors.push(c.r, c.g, c.b, opacity);
                     
-                    const arrow = customArrow(pos.x, pos.y, pos.z, lastPos.x, lastPos.y, lastPos.z,  this.trajectories[trajectory].thickness*0.0002, c );
-                    if ( arrow ){
-                        arrow.name = t-1;
-                        arrow.layers.set(2); // to avoid intersections with arrows
-                        this.trajectories[trajectory].add(arrow);
+                    if (t > 0) {
+                        const arrow = customArrow(pos.x, pos.y, pos.z, trajectory.lastPos.x, trajectory.lastPos.y, trajectory.lastPos.z, this.trajectories[name].thickness * 0.0002, c);
+                        if (arrow) {
+                            arrow.name = t - 1;
+                            arrow.layers.set(2);
+                            arrow.visible = opacity > 0;
+                            arrow.children[0].material.opacity = opacity;
+                            this.trajectories[name].add(arrow);
+                        }
                     }
                 }
 
-                lastPos.set(pos.x, pos.y, pos.z);
-            }
-            // if( !this.trajectoryEnd ) {
-            //     this.computeTrajectories(animation);
-            //     return;
-            // }
-            // Create geometry
-            const geometry = new MagicLineGeometry();
-            geometry.setPositions(positions);
-            geometry.setAttribute( 'color', new THREE.Float32BufferAttribute( colors, 4 ) );
-            geometry.setColors(colors);
-            const material = new LineMaterial({
-                vertexColors: true,
-                dashed: false,
-                alphaToCoverage: true,
-                linewidth: this.trajectories[trajectory].thickness,
-                vertexShader: vertexShader,
-                fragmentShader: fragmentShader,
-                transparent: true,
+                trajectory.lastPos.copy(pos);
+
+            //     // Recompute quaternions
+            //     if (isRecompute && data.offsetRotParent && trajectory.p3) {
+            //         trajectory.p3.updateWorldMatrix(true, false);
+            //         trajectory.p3.getWorldQuaternion(this._tmpQuat1);
+            //         this._tmpQuat1.premultiply(data.offsetRotParent.clone().invert()); 
+            //         trajectory.p3.parent.updateWorldMatrix(true, false);
+            //         trajectory.p3.parent.getWorldQuaternion(this._tmpQuat2).invert();
+            //         trajectory.p3.quaternion.copy(this._tmpQuat1.premultiply(this._tmpQuat2));
+            //     }
+            //     if (isRecompute && data.offsetRot && trajectory.p2 && trajectory.p3) {
+            //         trajectory.p2.updateWorldMatrix(true, false);
+            //         trajectory.p2.getWorldQuaternion(this._tmpQuat1);
+            //         this._tmpQuat1.premultiply(data.offsetRot.clone().invert());
+            //         trajectory.p3.updateWorldMatrix(true, false);
+            //         trajectory.p3.getWorldQuaternion(this._tmpQuat2).invert();
+            //         trajectory.p2.quaternion.copy(this._tmpQuat1.premultiply(this._tmpQuat2));
+            //     }
             });
-            material.resolution.set(window.innerWidth, window.innerHeight);
-            const line = new Line2(geometry, material);
-            line.name = "line";
-            line.layers.set(2); // to avoid intersections with line
-            this.trajectories[trajectory].add(line);
-            this.trajectories[trajectory].positions = positions;
-            this.trajectories[trajectory].colors = colors;
         }
+
+        // Create/Update line meshes (trajectories): geometries
+        trajectoriesNames.forEach( name => {
+            const trajectory = this.trajectories[name];
+            if( !trajectory ) {
+                return;
+            }
+            if (isRecompute) {
+                const line = trajectory.getObjectByName("line");
+                if (line) {
+                    line.geometry.setPositions(trajectory.positions);
+                    line.geometry.setColors(trajectory.colors);
+                    line.material.needsUpdate = true;
+                }
+            }
+            else {
+                const tData = trajectoryData[name];
+                const geometry = new MagicLineGeometry();
+                geometry.setPositions(tData.positions);
+                geometry.setColors(tData.colors);
+                
+                const material = new LineMaterial({
+                    vertexColors: true,
+                    alphaToCoverage: true,
+                    linewidth: trajectory.thickness,
+                    vertexShader: vertexShader,
+                    fragmentShader: fragmentShader,
+                    transparent: true
+                });
+                material.defines = material.defines || {};
+                material.defines.USE_COLOR_ALPHA = "";
+                material.resolution.set(window.innerWidth, window.innerHeight);
+
+                const line = new Line2(geometry, material);
+                line.name = "line";
+                trajectory.add(line);
+                
+                trajectory.positions = tData.positions;
+                trajectory.colors = tData.colors;
+            }
+        });
+        
+        // Restore animation state
+        mixer.setTime(originalTime);
+        this.object.updateWorldMatrix(true, true);
     }
 
-    updateTrajectories( startTime, endTime ) {
-        const mixer = this.mixer;// this.performs.currentCharacter.mixer;
-        const action = mixer._actions[0];
-        if( !action ) {
-            return;
+    computeTrajectories(animation, data = {}) {
+        this.dispose(); 
+        const rootTrack = animation.tracks[0];
+        this.trajectoryEnd = rootTrack.times.length;
+        const trajectoryKeys = Object.keys(this.trajectories);
+
+        // Init map tracks-bones
+        for (let trajectory of trajectoryKeys) {
+            for (let track of animation.tracks) {
+                const name = track.name || track.groupId;
+                if (name.includes(trajectory + ".") || name.includes(trajectory.replace("4", "EndSite") + ".") || name.replace("mixamorig_", "") == trajectory) {
+                    this.trajectories[trajectory].name = name.replace(".quaternion", "");
+                    break;
+                }
+            }
         }
+        this.buildTrajectories(trajectoryKeys, rootTrack.times, data, false);
+    }
+
+    recomputeTrajectories( trajectories, times, data = {}) {      
+        this.buildTrajectories(trajectories, times, data, true);
+    }
+
+    updateTrajectories( startTime, endTime, gradient = false ) {
+        const mixer = this.mixer;
+        const action = mixer._actions[0];
+        if( !action ) return;
 
         // Get start frame index
         const startFrame = getFrameIndex(action, startTime);
@@ -12383,40 +12561,64 @@ class TrajectoriesHelper {
         const endFrame = getFrameIndex(action, endTime);
         this.trajectoryEnd = endFrame;
     
+        const times = action.getClip().tracks[0].times;
+
         // Update material alpha for each trajectory (line and arrows)
         for( let trajectory in this.trajectories ) {
-            const positions = this.trajectories[trajectory].positions;
-            let colors = this.trajectories[trajectory].colors;
+            const currentTraj = this.trajectories[trajectory];
+            const positions = currentTraj.positions;
+            if (!positions || positions.length < 6) continue;
 
+            let colors = currentTraj.colors;
             const totalFrames = positions.length / 3;
             
-            if ( totalFrames < 2 ){ continue; }
-            
-            const listOfObjects = this.trajectories[trajectory].children;// N arrows ( N <= frames ) and, the last element, is the line2 object (with all lines inside)
-            const line = listOfObjects[ listOfObjects.length - 1 ];
-            let nextArrowFrame = listOfObjects[0].isLine2 ? -1 : listOfObjects[0].name;
-            let nextArrowInArray = 0;
+            const line = currentTraj.getObjectByName("line");
+            if(!line) continue;
+
+            const arrowMap = {};
+            const children = currentTraj.children;
+            for(let i = 0; i < children.length; i++) {
+                if(children[i].name !== "line") {
+                    arrowMap[children[i].name] = children[i];
+                }
+            }
+
+            let gradIdx = -1;
+            let maxGradient = [1.0001, 0];
+            let g0 = [0, 0];
+            let g1 = gradient ? gradient[0] : 0;
 
             for(let frame = 0; frame < totalFrames; frame++) {
-                // update line colors
-                let alpha = 0;
+                let alpha = 0.8;
                 if( frame < startFrame ) {
-                    alpha = (frame - startFrame)/10;
+                    alpha = (frame - startFrame) / 10;
                 }
                 else if( frame > endFrame ) {
-                    alpha = (endFrame - frame)/10;
+                    alpha = (endFrame - frame) / 10;
                 }
-                const opacity = Math.max(0,Math.min(1,0.8 + alpha));
-                colors[frame*8+3] = opacity;
-                colors[frame*8+7] = opacity;
+                else if (gradient){
+                    let t = (times[frame] - startTime) / (endTime - startTime); // normalize time in window
+                    // Find next valid gradient interval
+                    while( t > g1[0] ){
+                        g0 = g1;
+                        g1 = gradient[++gradIdx];
+                        if ( !g1 ){ g1 = maxGradient; break; }
+                    }
+                    // Compute delta factor
+                    t = (t - g0[0]) / (g1[0] - g0[0]);
+                    alpha = g0[1] * (1 - t) + g1[1] * t;
+                }
                 
-                // update arrow visibility
-                if ( nextArrowFrame == frame ){
-                    const arrow = listOfObjects[nextArrowInArray];
+                const opacity = Math.max(0, Math.min(1, alpha));
+                const f8 = frame * 8;
+                colors[f8 + 3] = opacity;
+                colors[f8 + 7] = opacity;
+                
+                const arrow = arrowMap[frame];
+                // Update arrow visibility
+                if (arrow) {
                     arrow.children[0].material.opacity = opacity;
                     arrow.visible = opacity > 0;
-                    nextArrowInArray++;
-                    nextArrowFrame = listOfObjects[nextArrowInArray].isLine2 ? -1 : listOfObjects[nextArrowInArray].name; 
                 }
             }
 
@@ -12424,39 +12626,31 @@ class TrajectoriesHelper {
         }
     }
 
-    show( ) {
-        for( let trajectory in this.trajectories ) {
-            this.trajectories[trajectory].visible = true;
+    show( trajectory ) {
+        if( trajectory ) {
+            if(this.trajectories[trajectory]) {
+                this.trajectories[trajectory].visible = true;
+            }
+            return;
         }
+        for( let t in this.trajectories ) this.trajectories[t].visible = true;
     }
 
-    hide( ) {
-        for( let trajectory in this.trajectories ) {
-            this.trajectories[trajectory].visible = false;
+    hide( trajectory ) {
+        if( trajectory ) {
+            if(this.trajectories[trajectory]) {
+                this.trajectories[trajectory].visible = false;
+            }
+            return;
         }
+        for( let t in this.trajectories ) this.trajectories[t].visible = false;
     }
 
     dispose(){
-
         for( const t in this.trajectories ){
             this.trajectories[t].traverse( (obj) =>{
-                if ( obj.geometry ){ obj.geometry.dispose(); }
-                if ( obj.material ){ obj.material.dispose(); }
-
-                // https://discourse.threejs.org/t/correctly-remove-mesh-from-scene-and-dispose-material-and-geometry/5448/10
-                // if (obj.material.map)              obj.material.map.dispose ();
-                // if (obj.material.lightMap)         obj.material.lightMap.dispose ();
-                // if (obj.material.bumpMap)          obj.material.bumpMap.dispose ();
-                // if (obj.material.normalMap)        obj.material.normalMap.dispose ();
-                // if (obj.material.specularMap)      obj.material.specularMap.dispose ();
-                // if (obj.material.envMap)           obj.material.envMap.dispose ();
-                // if (obj.material.alphaMap)         obj.material.alphaMap.dispose();
-                // if (obj.material.aoMap)            obj.material.aoMap.dispose();
-                // if (obj.material.displacementMap)  obj.material.displacementMap.dispose();
-                // if (obj.material.emissiveMap)      obj.material.emissiveMap.dispose();
-                // if (obj.material.gradientMap)      obj.material.gradientMap.dispose();
-                // if (obj.material.metalnessMap)     obj.material.metalnessMap.dispose();
-                // if (obj.material.roughnessMap)     obj.material.roughnessMap.dispose();
+                if ( obj.geometry ) obj.geometry.dispose();
+                if ( obj.material ) obj.material.dispose();
             });
             this.trajectories[t].clear();
             this.trajectories[t].removeFromParent();
@@ -12465,51 +12659,36 @@ class TrajectoriesHelper {
 }
 
 const getFrameIndex = ( action, time = action.time, mode = 0 ) => {
+    if(!action) return -1;
 
-    if(!action)
-        return -1;
-
-    const animationTime = time;
     const times = action._clip.tracks[0].times;
-
     //binary search
     let min = 0, max = times.length - 1;
     
     // edge cases
-    if ( times[min] > animationTime ){
-        return mode == -1 ? -1 : 0;
-    }
-    if ( times[max] < animationTime ){
-        return mode == 1 ? -1 : max;
-    }
+    if ( times[min] > time ) return mode == -1 ? -1 : 0;
+    if ( times[max] < time ) return mode == 1 ? -1 : max;
     
     // time is between first and last frame
-    let half = Math.floor( ( min + max ) / 2 );
+    let half = (min + max) >> 1;
     while ( min < half && half < max ){
-        if ( animationTime < times[half] ){ max = half; }
-        else { min = half; }
-        half = Math.floor( ( min + max ) / 2 );
+        if ( time < times[half] ) max = half;
+        else min = half;
+        half = (min + max) >> 1;
     }
 
     if (mode == 0 ){
-        return Math.abs( animationTime - times[min] ) < Math.abs( animationTime - times[max] ) ? min : max;
+        return Math.abs( time - times[min] ) < Math.abs( time - times[max] ) ? min : max;
     }
-    else if ( mode == -1 ){
-        return times[max] == animationTime ? max : min;
-    }
-    return times[min] == animationTime ? min : max;
+    return mode == -1 ? (times[max] == time ? max : min) : (times[min] == time ? min : max);
 };
-
 
 const customArrow = ( fx, fy, fz, ix, iy, iz, thickness, color) => {
     const length = Math.sqrt( (ix-fx)**2 + (iy-fy)**2 + (iz-fz)**2 );
-    if(length < 0.01) {
-        return null;
-    }
+    if(length < 0.01) return null;
 
     const material = new THREE.MeshLambertMaterial( {color: color, transparent: true} );
-    const geometry = new THREE.ConeGeometry( 1, 1, 3 ).rotateX( Math.PI/2).translate( 0, 0, -0.5 );
-    const head = new THREE.Mesh( geometry, material );
+    const head = new THREE.Mesh( SHARED_CONE_GEO, material );
     head.position.set( 0, 0, length );
     head.scale.set( 2*thickness, 2*thickness, 8*thickness );
 
@@ -12595,7 +12774,7 @@ const fragmentShader =
 		void main() {
 
 			float alpha = opacity;
-			vec4 diffuseColor = vec4( vec3(1.0,1.0,1.0), alpha );
+			vec4 diffuseColor = vec4( diffuse, alpha );
 
 			#include <clipping_planes_fragment>
 
@@ -12673,7 +12852,7 @@ const fragmentShader =
 
 			#include <logdepthbuf_fragment>
 			#include <color_fragment>
-
+            // diffuseColor.rgb = vColor.rgb;
             #ifdef USE_COLOR_ALPHA
                 alpha = vColor.a;
                 //diffuseColor.rgb = vColor.rbg;
@@ -13821,7 +14000,7 @@ class KeyframeApp {
         if( !this.trajectoriesHelper || !animation ) {
             return;
         }
-        this.trajectoriesHelper.computeTrajectories( animation );
+        this.trajectoriesHelper.computeTrajectories( animation.mixerBodyAnimation );
         this.trajectoriesComputationPending = false;
     }
 
@@ -13864,9 +14043,9 @@ class KeyframeApp {
 }
 
 // Correct negative blenshapes shader of ThreeJS
-THREE.ShaderChunk[ 'morphnormal_vertex' ] = "#ifdef USE_MORPHNORMALS\n	objectNormal *= morphTargetBaseInfluence;\n	#ifdef MORPHTARGETS_TEXTURE\n		for ( int i = 0; i < MORPHTARGETS_COUNT; i ++ ) {\n	    objectNormal += getMorph( gl_VertexID, i, 1, 2 ) * morphTargetInfluences[ i ];\n		}\n	#else\n		objectNormal += morphNormal0 * morphTargetInfluences[ 0 ];\n		objectNormal += morphNormal1 * morphTargetInfluences[ 1 ];\n		objectNormal += morphNormal2 * morphTargetInfluences[ 2 ];\n		objectNormal += morphNormal3 * morphTargetInfluences[ 3 ];\n	#endif\n#endif";
-THREE.ShaderChunk[ 'morphtarget_pars_vertex' ] = "#ifdef USE_MORPHTARGETS\n	uniform float morphTargetBaseInfluence;\n	#ifdef MORPHTARGETS_TEXTURE\n		uniform float morphTargetInfluences[ MORPHTARGETS_COUNT ];\n		uniform sampler2DArray morphTargetsTexture;\n		uniform vec2 morphTargetsTextureSize;\n		vec3 getMorph( const in int vertexIndex, const in int morphTargetIndex, const in int offset, const in int stride ) {\n			float texelIndex = float( vertexIndex * stride + offset );\n			float y = floor( texelIndex / morphTargetsTextureSize.x );\n			float x = texelIndex - y * morphTargetsTextureSize.x;\n			vec3 morphUV = vec3( ( x + 0.5 ) / morphTargetsTextureSize.x, y / morphTargetsTextureSize.y, morphTargetIndex );\n			return texture( morphTargetsTexture, morphUV ).xyz;\n		}\n	#else\n		#ifndef USE_MORPHNORMALS\n			uniform float morphTargetInfluences[ 8 ];\n		#else\n			uniform float morphTargetInfluences[ 4 ];\n		#endif\n	#endif\n#endif";
-THREE.ShaderChunk[ 'morphtarget_vertex' ] = "#ifdef USE_MORPHTARGETS\n	transformed *= morphTargetBaseInfluence;\n	#ifdef MORPHTARGETS_TEXTURE\n		for ( int i = 0; i < MORPHTARGETS_COUNT; i ++ ) {\n			#ifndef USE_MORPHNORMALS\n				transformed += getMorph( gl_VertexID, i, 0, 1 ) * morphTargetInfluences[ i ];\n			#else\n				transformed += getMorph( gl_VertexID, i, 0, 2 ) * morphTargetInfluences[ i ];\n			#endif\n		}\n	#else\n		transformed += morphTarget0 * morphTargetInfluences[ 0 ];\n		transformed += morphTarget1 * morphTargetInfluences[ 1 ];\n		transformed += morphTarget2 * morphTargetInfluences[ 2 ];\n		transformed += morphTarget3 * morphTargetInfluences[ 3 ];\n		#ifndef USE_MORPHNORMALS\n			transformed += morphTarget4 * morphTargetInfluences[ 4 ];\n			transformed += morphTarget5 * morphTargetInfluences[ 5 ];\n			transformed += morphTarget6 * morphTargetInfluences[ 6 ];\n			transformed += morphTarget7 * morphTargetInfluences[ 7 ];\n		#endif\n	#endif\n#endif";
+// THREE.ShaderChunk[ 'morphnormal_vertex' ] = "#ifdef USE_MORPHNORMALS\n	objectNormal *= morphTargetBaseInfluence;\n	#ifdef MORPHTARGETS_TEXTURE\n		for ( int i = 0; i < MORPHTARGETS_COUNT; i ++ ) {\n	    objectNormal += getMorph( gl_VertexID, i, 1, 2 ) * morphTargetInfluences[ i ];\n		}\n	#else\n		objectNormal += morphNormal0 * morphTargetInfluences[ 0 ];\n		objectNormal += morphNormal1 * morphTargetInfluences[ 1 ];\n		objectNormal += morphNormal2 * morphTargetInfluences[ 2 ];\n		objectNormal += morphNormal3 * morphTargetInfluences[ 3 ];\n	#endif\n#endif";
+// THREE.ShaderChunk[ 'morphtarget_pars_vertex' ] = "#ifdef USE_MORPHTARGETS\n	uniform float morphTargetBaseInfluence;\n	#ifdef MORPHTARGETS_TEXTURE\n		uniform float morphTargetInfluences[ MORPHTARGETS_COUNT ];\n		uniform sampler2DArray morphTargetsTexture;\n		uniform vec2 morphTargetsTextureSize;\n		vec3 getMorph( const in int vertexIndex, const in int morphTargetIndex, const in int offset, const in int stride ) {\n			float texelIndex = float( vertexIndex * stride + offset );\n			float y = floor( texelIndex / morphTargetsTextureSize.x );\n			float x = texelIndex - y * morphTargetsTextureSize.x;\n			vec3 morphUV = vec3( ( x + 0.5 ) / morphTargetsTextureSize.x, y / morphTargetsTextureSize.y, morphTargetIndex );\n			return texture( morphTargetsTexture, morphUV ).xyz;\n		}\n	#else\n		#ifndef USE_MORPHNORMALS\n			uniform float morphTargetInfluences[ 8 ];\n		#else\n			uniform float morphTargetInfluences[ 4 ];\n		#endif\n	#endif\n#endif";
+// THREE.ShaderChunk[ 'morphtarget_vertex' ] = "#ifdef USE_MORPHTARGETS\n	transformed *= morphTargetBaseInfluence;\n	#ifdef MORPHTARGETS_TEXTURE\n		for ( int i = 0; i < MORPHTARGETS_COUNT; i ++ ) {\n			#ifndef USE_MORPHNORMALS\n				transformed += getMorph( gl_VertexID, i, 0, 1 ) * morphTargetInfluences[ i ];\n			#else\n				transformed += getMorph( gl_VertexID, i, 0, 2 ) * morphTargetInfluences[ i ];\n			#endif\n		}\n	#else\n		transformed += morphTarget0 * morphTargetInfluences[ 0 ];\n		transformed += morphTarget1 * morphTargetInfluences[ 1 ];\n		transformed += morphTarget2 * morphTargetInfluences[ 2 ];\n		transformed += morphTarget3 * morphTargetInfluences[ 3 ];\n		#ifndef USE_MORPHNORMALS\n			transformed += morphTarget4 * morphTargetInfluences[ 4 ];\n			transformed += morphTarget5 * morphTargetInfluences[ 5 ];\n			transformed += morphTarget6 * morphTargetInfluences[ 6 ];\n			transformed += morphTarget7 * morphTargetInfluences[ 7 ];\n		#endif\n	#endif\n#endif";
 
 class Performs {
     constructor() {
@@ -14913,75 +15092,102 @@ class Performs {
             const morphTargets = {};
 
             if(avatarName == "Witch") {
-                model.traverse( (object) => {
-                    if ( object.isMesh || object.isSkinnedMesh ) {
-                        if (object.skeleton){
-                            skeleton = object.skeleton; 
+                model.traverse( (o) => {
+                    if ( o.isMesh || o.isSkinnedMesh ) {
+                        if (o.skeleton){
+                            skeleton = o.skeleton; 
                         }                    
-                        if(!object.name.includes("Hat")) {
-                            object.material.side = THREE.FrontSide;
+                        if(!o.name.includes("Hat")) {
+                            o.material.side = THREE.FrontSide;
                         }
-                        object.frustumCulled = false;
-                        object.castShadow = true;
-                        object.receiveShadow = true;
-                        if (object.name == "Eyelashes") // eva
-                        object.castShadow = false;
-                        if(object.material.map) 
-                        object.material.map.anisotropy = 16;
-                        if(object.name == "Hair") {
-                            object.material.map = null;
-                            object.material.color.set(0x6D1881);
+                        o.frustumCulled = false;
+                        o.castShadow = true;
+                        o.receiveShadow = true;
+                        if (o.name == "Eyelashes") // eva
+                        o.castShadow = false;
+                        if(o.material.map) 
+                        o.material.map.anisotropy = 16;
+                        if(o.name == "Hair") {
+                            o.material.map = null;
+                            o.material.color.set(0x6D1881);
                         }
-                        if(object.name.includes("Bottom")) {
-                            object.material.map = null;
-                            object.material.color.set(0x000000);
+                        if(o.name.includes("Bottom")) {
+                            o.material.map = null;
+                            o.material.color.set(0x000000);
                         }
-                        if(object.name.includes("Top")) {
-                            object.material.map = null;
-                            object.material.color.set(0x000000);
+                        if(o.name.includes("Top")) {
+                            o.material.map = null;
+                            o.material.color.set(0x000000);
                         }
-                        if(object.name.includes("Shoes")) {
-                            object.material.map = null;
-                            object.material.color.set(0x19A7A3);
+                        if(o.name.includes("Shoes")) {
+                            o.material.map = null;
+                            o.material.color.set(0x19A7A3);
                         }
-                        if(object.morphTargetDictionary) {
-                            morphTargets[object.name] = object.morphTargetDictionary;
+                        if(o.morphTargetDictionary) {
+                            morphTargets[o.name] = o.morphTargetDictionary;
+                            o.material.defines.MORPHTARGETS_TEXTURE = " ";
+                          
+                            const depthMat = new THREE.MeshDepthMaterial({
+                                depthPacking: THREE.RGBADepthPacking
+                            });
+                            if(!depthMat.defines) {
+                                depthMat.defines = {};
+                            }
+                            depthMat.defines.USE_MORPHTARGETS = '';
+                            depthMat.defines.MORPHTARGETS_TEXTURE = '';
+                            depthMat.defines.MORPHTARGETS_COUNT = o.morphTargetInfluences.length; 
+                            depthMat.defines.USE_SKINNING = '';
+                             
+                            o.customDepthMaterial = depthMat;
+                            o.customDepthMaterial.needsUpdate = true;
                         }
-                    } else if (object.isBone) {
-                        object.scale.set(1.0, 1.0, 1.0);
+                    } else if (o.isBone) {
+                        o.scale.set(1.0, 1.0, 1.0);
                     }
                 } );
             }
             else {
-                model.traverse( (object) => {
-                    if ( object.isMesh || object.isSkinnedMesh ) {
-                        if (object.skeleton){
-                            skeleton = object.skeleton; 
+                model.traverse( o => {
+                    if (o.isMesh || o.isSkinnedMesh) {
+                        o.castShadow = true;
+                        o.receiveShadow = true;
+                        o.frustumCulled = false;
+                        if ( o.skeleton ){ 
+                            skeleton = o.skeleton;
                         }
-                        object.material.side = THREE.FrontSide;
-                        object.frustumCulled = false;
-                        object.castShadow = true;
-                        object.receiveShadow = true;
-                        if (object.name == "Eyelashes") {
-                            object.castShadow = false;
+                        if (o.name == "Body") {
+                            o.name == "BodyMesh";
                         }
-                        if(object.material.map) {
-                            object.material.map.anisotropy = 16;
+                        if(o.morphTargetDictionary)
+                        {
+                            morphTargets[o.name] = o.morphTargetDictionary;
+                            o.material.defines.MORPHTARGETS_TEXTURE = " ";
+                          
+                            const depthMat = new THREE.MeshDepthMaterial({
+                                depthPacking: THREE.RGBADepthPacking
+                            });
+                            if(!depthMat.defines) {
+                                depthMat.defines = {};
+                            }
+                            depthMat.defines.USE_MORPHTARGETS = '';
+                            depthMat.defines.MORPHTARGETS_TEXTURE = '';
+                            depthMat.defines.MORPHTARGETS_COUNT = o.morphTargetInfluences.length; 
+                            depthMat.defines.USE_SKINNING = '';
+                             
+                            o.customDepthMaterial = depthMat;
+                            o.customDepthMaterial.needsUpdate = true;
                         }
-                        if(object.morphTargetDictionary) {
-                            morphTargets[object.name] = object.morphTargetDictionary;
+                        if(o.name == "Classic_short") {
+                            if( o.children.length > 1 ){ 
+                                o.children[1].renderOrder = 1; 
+                            }
                         }
-                    } else if (object.isBone) {
-                        object.scale.set(1.0, 1.0, 1.0);
+                        if(o.name.includes("Eyelashes")) {
+                            o.castShadow = false;
+                        }
+                        o.material.side = THREE.FrontSide;                    
                     }
-                });
-            }
-
-            if ( avatarName == "Kevin" ){
-                let hair = model.getObjectByName( "Classic_short" );
-                if( hair && hair.children.length > 1 ){ 
-                    hair.children[1].renderOrder = 1; 
-                }
+                } );
             }
                         
             model.name = avatarName;
